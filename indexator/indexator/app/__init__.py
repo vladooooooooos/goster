@@ -1,0 +1,1 @@
+"""Indexator application package."""

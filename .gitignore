@@ -1,0 +1,78 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments and local package installs
+.venv/
+venv/
+env/
+ENV/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs, temporary files, and smoke-test output
+*.log
+*.tmp
+*.temp
+.vector_store_smoke_tmp/
+goster_vector_store_smoke_*/
+indexator/.test_tmp/
+
+# Python build artifacts
+build/
+dist/
+*.egg-info/
+
+# Node/frontend artifacts, if added later
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/
+coverage/
+
+# Local document corpora and generated indexes
+docs/*.pdf
+gost-chat/docs/*.pdf
+indexator/indexator/testdocs/*.pdf
+gost-chat/data/
+indexator/indexator/data/
+indexator/indexator/output/
+shared/data/
+
+# Qdrant local persistence and lock files
+**/qdrant/
+**/.lock
+*.sqlite
+*.sqlite3
+*.db
+
+# Model and ML caches, if stored in the workspace
+.cache/
+models/
+model_cache/
+hf_cache/
+huggingface/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+
+# Keep examples, docs, and source files visible even near ignored folders
+!.env.example
+!**/*.example
+!**/*.example.*
+!README.md
+!**/README.md

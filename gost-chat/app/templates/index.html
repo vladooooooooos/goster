@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ГОСТер</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="chat-panel" aria-label="Документный чат">
+        <header class="chat-header">
+          <h1>ГОСТер</h1>
+        </header>
+
+        <div id="messages" class="messages" aria-live="polite"></div>
+
+        <p id="error" class="error" role="alert" hidden></p>
+
+        <form id="chat-form" class="chat-form">
+          <label class="sr-only" for="message-input">Сообщение</label>
+          <textarea
+            id="message-input"
+            name="message"
+            rows="3"
+            placeholder="Спросите по проиндексированным документам..."
+            autocomplete="off"
+            required
+          ></textarea>
+          <button id="send-button" type="submit">Отправить</button>
+        </form>
+      </section>
+    </main>
+
+    <script src="{{ url_for('static', path='app.js') }}"></script>
+  </body>
+</html>

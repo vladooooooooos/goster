@@ -1,0 +1,48 @@
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    app_name: str = "GOST Chat"
+    llm_provider: str = "polza"
+    llm_base_url: str = "https://polza.ai/api/v1"
+    llm_model: str = "google/gemma-4-31b-it"
+    llm_temperature: float = 0.2
+    llm_max_tokens: int = 1200
+    llm_request_timeout_seconds: float = 120.0
+    llm_api_key_env_var: str = "POLZA_API_KEY"
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "gemma4:e4b"
+    ollama_request_timeout_seconds: float = 120.0
+    indexer_output_dir: Path = Path("data")
+    log_level: str = "INFO"
+    retrieval_backend: str = "auto"
+    qdrant_local_path: Path = Path("../shared/data/qdrant")
+    qdrant_collection_name: str = "gost_blocks"
+    embedding_model_name: str = "BAAI/bge-m3"
+    embedding_device: str = "auto"
+    embedding_batch_size: int = 4
+    embedding_normalize_embeddings: bool = True
+    reranker_enabled: bool = True
+    reranker_model_name: str = "BAAI/bge-reranker-v2-m3"
+    reranker_device: str = "auto"
+    reranker_batch_size: int = 2
+    reranker_max_length: int = 512
+    reranker_top_k: int = 30
+    reranker_top_n: int = 5
+    reranker_use_fp16_if_available: bool = True
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="GOST_CHAT_",
+        extra="ignore",
+    )
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+

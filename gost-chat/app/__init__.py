@@ -1,0 +1,1 @@
+"""GOST Chat application package."""

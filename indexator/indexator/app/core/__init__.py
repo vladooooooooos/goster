@@ -1,0 +1,1 @@
+"""Core indexing pipeline package."""

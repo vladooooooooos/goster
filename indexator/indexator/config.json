@@ -1,0 +1,22 @@
+{
+  "app": {
+    "name": "Indexator",
+    "version": "0.1.0"
+  },
+  "ui": {
+    "window_width": 1100,
+    "window_height": 720
+  },
+  "embedding": {
+    "model_name": "BAAI/bge-m3",
+    "device": "auto",
+    "batch_size": 8,
+    "normalize_embeddings": true
+  },
+  "storage": {
+    "provider": "qdrant",
+    "collection_name": "gost_blocks",
+    "local_path": "../../shared/data/qdrant",
+    "distance_metric": "Cosine"
+  }
+}
