@@ -73,7 +73,7 @@ def run_writer(qdrant_path: Path | None) -> None:
     if qdrant_path is None:
         raise ValueError("--qdrant-path is required for writer phase.")
 
-    sys.path.insert(0, str(REPO_ROOT / "indexator" / "indexator"))
+    sys.path.insert(0, str(REPO_ROOT / "indexator"))
 
     from app.core.blocks import StructuredBlock
     from app.services.embedding_service import BlockEmbedding, BlockEmbeddingRun

@@ -1,0 +1,10 @@
+# Workspace development dependencies.
+#
+# Use this from the repository root when you want one environment that can run
+# cross-component smoke checks and work on both GOST Chat and Indexator.
+# Component-specific setup should still prefer the component requirements files:
+# - gost-chat/requirements.txt
+# - indexator/requirements.txt
+
+-r gost-chat/requirements.txt
+-r indexator/requirements.txt

@@ -16,7 +16,7 @@
   "storage": {
     "provider": "qdrant",
     "collection_name": "gost_blocks",
-    "local_path": "../../shared/data/qdrant",
+    "local_path": "../shared/data/qdrant",
     "distance_metric": "Cosine"
   }
 }

@@ -93,7 +93,7 @@ def main() -> int:
     assert built_context.selected[0].page_label == "page 1"
 
     rag_service = RagService(
-        ollama_client=FakeOllamaClient(),
+        llm_service=FakeLlmService(),
         retrieval_pipeline=FakeRetrievalPipeline(ranked_blocks),
         context_builder=builder,
     )
@@ -157,7 +157,7 @@ class FakeRetrievalPipeline:
         )
 
 
-class FakeOllamaClient:
+class FakeLlmService:
     async def chat(self, messages: list[dict[str, str]]) -> str:
         assert messages
         prompt = messages[-1]["content"]

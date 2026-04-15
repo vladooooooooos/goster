@@ -56,7 +56,7 @@ def main() -> int:
     assert top.payload["file_path"] == str(REPO_ROOT / "docs" / "standard-b.pdf")
 
     rag_service = RagService(
-        ollama_client=FakeOllamaClient(),
+        llm_service=FakeLlmService(),
         retrieval_pipeline=pipeline,
         context_builder=ContextBuilder(),
     )
@@ -144,7 +144,7 @@ class FakeReranker:
         return reranked[:top_n]
 
 
-class FakeOllamaClient:
+class FakeLlmService:
     async def chat(self, messages: list[dict[str, str]]) -> str:
         assert messages
         assert "candidate-b" in messages[-1]["content"]

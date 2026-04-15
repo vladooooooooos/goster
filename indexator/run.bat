@@ -1,5 +1,5 @@
 @echo off
 setlocal
-cd /d "%~dp0indexator"
-".\.venv\Scripts\python.exe" -m app.main
+cd /d "%~dp0"
+"%~dp0..\.venv\Scripts\python.exe" -m app.main
 pause

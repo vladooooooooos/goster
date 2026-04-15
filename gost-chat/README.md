@@ -1,27 +1,29 @@
-# GOSTer
+# GOSTer Chat
 
-GOSTer is a document-grounded RAG chat for indexed PDF documents. The web app presents one primary chat experience: users ask questions in the main chat, the backend retrieves relevant indexed chunks locally, Polza.ai generates a grounded answer from the final prompt, and the UI displays backend-built citations.
+GOSTer Chat — document-grounded RAG chat для проиндексированных PDF-документов. Web app даёт один основной chat flow: пользователь задаёт вопрос, backend локально извлекает релевантные chunks или vector blocks, LLM provider генерирует grounded answer, а UI показывает citations, построенные backend-ом.
 
-PDF indexing remains a separate CLI step. Retrieval, reranking, citation building, and document context assembly stay local in the app. Only final LLM messages are sent to the configured remote generation provider.
+Indexing остаётся отдельным шагом. Retrieval, reranking, citation building и сборка document context выполняются локально. Во внешний LLM provider отправляются только финальные LLM messages.
 
-## Features
+## Возможности
 
-- Single main web chat for grounded questions over indexed PDFs.
-- FastAPI backend with REST endpoints:
+- Основной web chat для grounded questions по indexed PDFs.
+- FastAPI backend с REST endpoints:
   - `GET /health`
   - `GET /models`
   - `POST /ask`
-  - `POST /search` for internal retrieval inspection
-  - `POST /chat` for internal plain LLM chat/debug use
+  - `POST /search` для internal retrieval inspection
+  - `POST /chat` для internal plain LLM chat/debug
 - OpenAI-compatible Polza.ai chat completion integration.
-- Separate retrieval service for indexed PDF chunks.
-- Dedicated RAG orchestration service for grounded document answers.
-- Lexical chunk ranking over the current JSON indexer output.
-- Backend-built citations from retrieved chunk metadata.
-- Separate local CLI PDF indexer for preparing source documents.
-- Configurable LLM provider, base URL, model, generation settings, and indexer output directory via environment variables.
+- Локальный JSON retrieval fallback по `data/index/chunks.jsonl`.
+- Vector retrieval через shared Qdrant store.
+- Local embeddings через `sentence-transformers`.
+- Optional local reranking.
+- Dedicated RAG orchestration service для grounded document answers.
+- Backend-built citations из retrieved metadata.
+- Внутренний lite JSON PDF indexer в `apps/indexer`.
+- Конфигурация через `.env` и environment variables.
 
-## Project Structure
+## Структура проекта
 
 ```text
 gost-chat/
@@ -36,75 +38,88 @@ gost-chat/
 |   |   |-- llm_service.py
 |   |   |-- chat_service.py
 |   |   |-- rag_service.py
-|   |   `-- retriever.py
+|   |   |-- retriever.py
+|   |   |-- qdrant_retriever.py
+|   |   |-- retrieval_pipeline.py
+|   |   `-- reranker_service.py
 |   |-- schemas/
-|   |   |-- ask.py
-|   |   |-- chat.py
-|   |   `-- search.py
 |   |-- templates/
-|   |   `-- index.html
 |   `-- static/
-|       |-- app.js
-|       `-- style.css
 |-- apps/
 |   `-- indexer/
 |       |-- main.py
 |       |-- config.py
 |       `-- services/
-|           |-- chunker.py
-|           |-- index_writer.py
-|           |-- metadata_service.py
-|           `-- pdf_loader.py
 |-- docs/
-|   `-- source PDF files
 |-- data/
-|   |-- index/
-|   |   `-- chunks.jsonl
-|   `-- metadata/
-|       |-- documents.json
-|       `-- indexing_summary.json
 |-- requirements.txt
 `-- README.md
 ```
 
-The `docs/` and `data/` folders are runtime locations. They are created or used by local workflows and may be absent in a fresh checkout.
+`docs/` и `data/` — runtime locations. Они создаются или используются локальными workflows и могут отсутствовать в fresh checkout.
 
-## Prerequisites
+## Требования
 
-- Python 3.11 or newer.
-- A Polza.ai API key for remote generation.
-- The indexed document data already prepared under `data/`.
+- Python 3.11+.
+- Polza.ai API key или другой OpenAI-compatible provider для remote generation.
+- Подготовленные indexed data:
+  - либо JSON index в `gost-chat/data/`;
+  - либо shared Qdrant store в `shared/data/qdrant/`, обычно созданный Indexator.
 
-Example:
+## Рекомендуемая установка через корневую среду
+
+Основной сценарий workspace — единое окружение `C:\goster\.venv`.
+
+Из корня репозитория:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements-dev.txt
+python -m pip install --upgrade --force-reinstall torch --index-url https://download.pytorch.org/whl/cu128
+```
+
+Проверить CUDA:
+
+```powershell
+python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU only')"
+```
+
+Скопировать config example:
+
+```powershell
+cd gost-chat
+Copy-Item .env.example .env
+```
+
+Реальный API key храните вне Git:
 
 ```powershell
 $env:POLZA_API_KEY="your-api-key"
 ```
 
-If you use a different OpenAI-compatible provider later, set the `GOST_CHAT_LLM_*` values in `.env`.
+## Установка только для GOST Chat
 
-## Setup
-
-From the project directory:
+Если нужен только chat component:
 
 ```powershell
 cd gost-chat
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-For NVIDIA GPU acceleration, replace the default CPU PyTorch wheel with a CUDA wheel after installing the base requirements:
+Для NVIDIA GPU acceleration можно заменить default CPU PyTorch wheel на CUDA wheel:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install --upgrade --force-reinstall torch --index-url https://download.pytorch.org/whl/cu128
 .\.venv\Scripts\python.exe -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU only')"
 ```
 
-When CUDA is available, `GOST_CHAT_EMBEDDING_DEVICE=auto` and `GOST_CHAT_RERANKER_DEVICE=auto` resolve to `cuda`. If the check prints `False`, the installed PyTorch wheel is CPU-only or the NVIDIA driver is not visible to Python.
+Когда CUDA доступна, `GOST_CHAT_EMBEDDING_DEVICE=auto` и `GOST_CHAT_RERANKER_DEVICE=auto` resolve to `cuda`. Если check печатает `False`, установлен CPU-only Torch или NVIDIA driver не виден Python.
 
-Edit `.env` if needed:
+## Основные настройки `.env`
 
 ```text
 GOST_CHAT_APP_NAME=GOST Chat
@@ -117,87 +132,107 @@ GOST_CHAT_LLM_REQUEST_TIMEOUT_SECONDS=120
 GOST_CHAT_LLM_API_KEY_ENV_VAR=POLZA_API_KEY
 GOST_CHAT_INDEXER_OUTPUT_DIR=data
 GOST_CHAT_LOG_LEVEL=INFO
+GOST_CHAT_RETRIEVAL_BACKEND=auto
+GOST_CHAT_QDRANT_LOCAL_PATH=../shared/data/qdrant
+GOST_CHAT_QDRANT_COLLECTION_NAME=gost_blocks
+GOST_CHAT_EMBEDDING_MODEL_NAME=BAAI/bge-m3
+GOST_CHAT_EMBEDDING_DEVICE=auto
+GOST_CHAT_RERANKER_ENABLED=true
 ```
 
-Set the API key outside committed config:
+## Полный локальный сценарий
+
+### Вариант A: основной сценарий через Indexator и Qdrant
+
+1. Запустить Indexator из корня:
 
 ```powershell
-$env:POLZA_API_KEY="your-api-key"
+.\indexator\run.bat
 ```
 
-## Full Local Flow
+2. Выбрать папку с PDFs и выполнить indexing.
+3. Убедиться, что shared Qdrant data лежит в `shared/data/qdrant/`.
+4. В `gost-chat/.env` оставить:
 
-1. Put PDF files in `docs/`.
-2. Build the local index:
-
-```powershell
-python apps/indexer/main.py --input-dir docs --output-dir data
+```text
+GOST_CHAT_RETRIEVAL_BACKEND=auto
+GOST_CHAT_QDRANT_LOCAL_PATH=../shared/data/qdrant
+GOST_CHAT_QDRANT_COLLECTION_NAME=gost_blocks
 ```
 
-3. Set the Polza.ai API key:
+5. Запустить web app:
 
 ```powershell
-$env:POLZA_API_KEY="your-api-key"
-```
-
-4. Start the FastAPI app:
-
-```powershell
+cd gost-chat
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-5. Open the web app:
+6. Открыть:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-6. Ask a question in the main chat. The chat submission calls the grounded RAG path and returns an answer with citations.
+### Вариант B: fallback через lite JSON indexer
 
-## Main Chat Flow
+Этот вариант полезен для demo, smoke/debug или если vector store временно не нужен.
 
-The main web chat is the primary user-facing experience.
+1. Положить PDF в `gost-chat/docs/`.
+2. Собрать JSON index:
 
-1. The user submits a question in the single chat input.
-2. `app/static/app.js` sends the question to `POST /ask` with a default `top_k` value.
-3. `app/api/ask.py` calls `RagService.answer_question`.
-4. `app/services/rag_service.py` calls `Retriever.search`.
-5. `app/services/retriever.py` reads the JSON indexer output and returns the highest-scoring chunks.
-6. If no chunks are found, the RAG service returns the configured Russian no-reliable-answer message without calling the remote LLM provider.
-7. If chunks are found, the RAG service builds a grounded prompt and calls the configured OpenAI-compatible LLM service.
-8. The response includes the answer, citations, retrieved chunk metadata, and retrieval information.
-9. The UI appends the assistant answer to the same conversation stream and displays citations under the answer.
+```powershell
+cd gost-chat
+python apps/indexer/main.py --input-dir docs --output-dir data
+```
 
-The RAG prompt instructs the assistant to answer only from retrieved indexed document context, avoid outside knowledge, state when evidence is insufficient, and avoid false certainty when retrieval is weak.
+3. Запустить web app:
+
+```powershell
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+## Основной chat flow
+
+1. Пользователь отправляет вопрос в single chat input.
+2. `app/static/app.js` отправляет запрос в `POST /ask`.
+3. `app/api/ask.py` вызывает `RagService.answer_question`.
+4. `app/services/retrieval_pipeline.py` выбирает retrieval backend и запускает retrieval/reranking.
+5. `app/services/context_builder.py` собирает context из выбранных evidence blocks.
+6. Если evidence недостаточно, RAG service возвращает configured no-reliable-answer message без remote LLM call.
+7. Если context есть, RAG service строит grounded prompt и вызывает configured OpenAI-compatible LLM service.
+8. Response содержит answer, citations, retrieved chunk metadata и retrieval info.
+9. UI добавляет assistant answer в conversation stream и показывает citations под ответом.
+
+RAG prompt требует отвечать только по retrieved document context, не использовать outside knowledge, явно говорить о недостатке evidence и не выдумывать unsupported claims.
 
 ## Citations
 
-Citations are built by the backend from retrieved chunk metadata, not from model-generated text. Each citation includes the fields available from the index:
+Citations строятся backend-ом из retrieved metadata, а не из model-generated text. Citation может включать:
 
 - `file_name`
 - `page_start`
 - `page_end`
-- `chunk_id`
+- `chunk_id` или `block_id`
 - `score`
+- `retrieval_score`
+- `rerank_score`
 - `evidence_preview`
 
-The web chat displays citations below each assistant response. Source snippets are shown in the citation list so the user can inspect the supporting evidence without leaving the conversation.
+Web chat показывает citations под каждым assistant response.
 
-## CLI PDF Indexer
+## Lite CLI PDF Indexer
 
-The indexer is a separate internal/admin command-line application. It scans a local folder for PDF files, extracts text page by page with PyMuPDF, splits the extracted text into overlapping chunks, and writes structured JSON output for retrieval by the chat app.
+`apps/indexer` — внутреннее административное CLI-приложение. Оно сканирует локальную папку с PDF, извлекает текст через PyMuPDF, режет его на overlapping chunks и пишет JSON output для chat app.
 
-It intentionally does not call the LLM provider, implement the RAG prompt, serve the web UI, create embeddings, add a database, use a vector store, or call cloud services.
+Он намеренно не вызывает LLM provider, не строит RAG prompt, не обслуживает web UI, не создаёт embeddings, не использует Qdrant и не обращается к cloud services.
 
-Run it from the project directory:
+Запуск из `gost-chat`:
 
 ```powershell
 python apps/indexer/main.py
 ```
 
-By default, it reads PDFs from `docs/` and writes output under `data/`.
-
-Useful flags:
+Полезные flags:
 
 ```powershell
 python apps/indexer/main.py --input-dir docs
@@ -207,7 +242,7 @@ python apps/indexer/main.py --output-dir data --clear
 python apps/indexer/main.py --chunk-size 3000 --chunk-overlap 300
 ```
 
-The same settings can be configured with environment variables:
+Переменные окружения:
 
 ```text
 GOST_INDEXER_INPUT_DIR=docs
@@ -216,48 +251,25 @@ GOST_INDEXER_CHUNK_SIZE=3000
 GOST_INDEXER_CHUNK_OVERLAP=300
 ```
 
-## Indexer Output
+## Выходные файлы JSON indexer
 
-The indexer writes:
+Lite indexer пишет:
 
-- `data/index/chunks.jsonl`: one JSON object per text chunk. Each chunk contains `document_id`, `file_name`, `chunk_id`, `page_start`, `page_end`, and `text`.
-- `data/metadata/documents.json`: per-document metadata including `document_id`, `filename`, `source_path`, `file_hash`, `indexed_at`, `chunk_count`, and `status`.
-- `data/metadata/indexing_summary.json`: summary of the latest run, including counts for found, indexed, skipped, and failed files plus output paths.
+- `data/index/chunks.jsonl`: один JSON object на каждый text chunk.
+- `data/metadata/documents.json`: metadata по документам.
+- `data/metadata/indexing_summary.json`: summary последнего run.
 
-The retriever uses this format directly. It joins chunk records with document metadata by `document_id` when useful, but it does not rewrite or migrate indexer output.
+JSON retriever читает этот формат напрямую. Vector/Qdrant retrieval использует shared Qdrant store, обычно подготовленный Indexator.
 
-## Retrieval
+## API
 
-The retrieval service lives in `app/services/retriever.py`. It reads:
-
-- `GOST_CHAT_INDEXER_OUTPUT_DIR/index/chunks.jsonl`
-- `GOST_CHAT_INDEXER_OUTPUT_DIR/metadata/documents.json`
-- `GOST_CHAT_INDEXER_OUTPUT_DIR/metadata/indexing_summary.json`, when present
-
-The default `GOST_CHAT_INDEXER_OUTPUT_DIR` is `data`.
-
-Retrieval currently uses a simple lexical baseline:
-
-1. Tokenize the user query and chunk text with a Unicode word tokenizer.
-2. Count term frequency per chunk.
-3. Apply a small IDF-style weight across loaded chunks.
-4. Add a coverage boost when more query terms match.
-5. Add a small exact phrase bonus.
-6. Return the highest-scoring chunks.
-
-This is intentionally easy to replace later with embeddings, hybrid search, or reranking. No embeddings or vector database are added in this version.
-
-The retriever caches the loaded index and reloads it when the chunk, document metadata, or summary files change by modified time or file size.
-
-## Ask API
-
-`POST /ask` is the grounded document question-answering endpoint used by the main chat.
+`POST /ask` — основной grounded document question-answering endpoint.
 
 Request:
 
 ```json
 {
-  "query": "What does the indexed document say about pipe pressure?",
+  "query": "Что документы говорят о давлении в трубопроводе?",
   "top_k": 5
 }
 ```
@@ -266,64 +278,33 @@ Response:
 
 ```json
 {
-  "query": "What does the indexed document say about pipe pressure?",
-  "answer": "The indexed documents say ...",
-  "citations": [
-    {
-      "document_id": "1b180454c521a2b6",
-      "file_name": "sample.pdf",
-      "chunk_id": "1b180454c521a2b6:00001",
-      "page_start": 1,
-      "page_end": 2,
-      "score": 0.123456,
-      "evidence_preview": "Extracted document text..."
-    }
-  ],
-  "retrieved_results_count": 1,
-  "retrieval_used": true,
-  "retrieved_chunks": [
-    {
-      "document_id": "1b180454c521a2b6",
-      "file_name": "sample.pdf",
-      "chunk_id": "1b180454c521a2b6:00001",
-      "page_start": 1,
-      "page_end": 2,
-      "score": 0.123456,
-      "text": "Extracted document text..."
-    }
-  ],
-  "retrieval_info": {
-    "top_k": 5,
-    "index_summary": {
-      "schema_version": 1
-    }
-  }
+  "query": "Что документы говорят о давлении в трубопроводе?",
+  "answer": "Ответ по проиндексированным документам...",
+  "citations": [],
+  "retrieved_results_count": 0,
+  "retrieval_used": false,
+  "retrieved_chunks": [],
+  "retrieval_info": {}
 }
 ```
 
-Example:
+Empty queries return `400`. Missing index files return `503`. Corrupted index data returns `500`. LLM provider configuration, availability, timeout или model call errors return `503`.
 
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/ask -Method Post -ContentType "application/json" -Body '{"query":"What does the indexed document say about pipe pressure?","top_k":5}'
-```
+## Внутренние и debug endpoints
 
-Empty queries return `400`. Missing index files return `503`. Corrupted index data returns `500`. LLM provider configuration, availability, timeout, or model call errors return `503`.
+`POST /search` остаётся доступен для internal retrieval inspection. Он возвращает matching indexed chunks/blocks и не вызывает LLM provider.
 
-## Internal And Debug Endpoints
+`POST /chat` остаётся доступен для internal plain LLM chat/debug через existing chat service. Main web chat его не использует.
 
-`POST /search` remains available for internal retrieval inspection. It returns matching indexed chunks and does not call the LLM provider. It is not exposed as a separate panel in the main web UI.
-
-`POST /chat` remains available for internal plain LLM chat/debug use through the existing chat service. It is no longer used by the main web chat.
-
-A direct provider smoke test is available without retrieval:
+Direct provider smoke test:
 
 ```powershell
 $env:POLZA_API_KEY="your-api-key"
 python scripts/polza_llm_smoke.py
-python scripts/polza_llm_smoke.py --prompt "Reply in Russian with one short sentence: did the test pass?"
+python scripts/polza_llm_smoke.py --prompt "Ответь по-русски одним коротким предложением: тест прошёл?"
 ```
 
-## API Checks
+## API checks
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/health
@@ -334,20 +315,18 @@ Invoke-RestMethod http://127.0.0.1:8000/chat -Method Post -ContentType "applicat
 python scripts/polza_llm_smoke.py
 ```
 
-## Future RAG Improvements
+## Будущие улучшения RAG
 
-The next RAG improvements should build on the current `RagService` and `Retriever` without changing the indexer format:
+- Улучшить hybrid retrieval: lexical + vector.
+- Добавить confidence/evidence-strength heuristics.
+- Расширить tests around empty retrieval, corrupted indexes и LLM provider failures.
+- Постепенно сделать Indexator основным indexing path, оставив lite JSON indexer как fallback/demo path.
 
-- Add embeddings or hybrid lexical plus vector retrieval behind the existing `Retriever` interface.
-- Add reranking before prompt assembly.
-- Add confidence or evidence-strength heuristics.
-- Add tests around empty retrieval, corrupted indexes, and LLM provider failures.
+## Примечания
 
-## Notes
-
-- The main web UI is a document-grounded RAG chat, not a general plain chat.
-- The frontend calls the FastAPI backend only; it never calls the LLM provider directly.
-- The default remote generation provider is Polza.ai at `https://polza.ai/api/v1`.
-- The default remote generation model is `google/gemma-4-31b-it`.
-- Retrieval is local-first and reads plain JSON files generated by the separate indexer.
-- Indexing remains external via the CLI indexer.
+- Main web UI — document-grounded RAG chat, а не general plain chat.
+- Frontend вызывает только FastAPI backend и никогда не обращается к LLM provider напрямую.
+- Default remote generation provider — Polza.ai at `https://polza.ai/api/v1`.
+- Default remote generation model — `google/gemma-4-31b-it`.
+- Retrieval local-first: JSON fallback читает `gost-chat/data`, vector path читает `shared/data/qdrant`.
+- Indexing остаётся external step: основной сценарий через Indexator, fallback через `apps/indexer`.

@@ -28,6 +28,12 @@ ENV/
 goster_vector_store_smoke_*/
 indexator/.test_tmp/
 
+# Codex-only local instructions
+indexator/agents.md
+indexator/AGENTS.md
+indexator/RULES.md
+indexator/rules.md
+
 # Python build artifacts
 build/
 dist/
@@ -43,10 +49,10 @@ coverage/
 # Local document corpora and generated indexes
 docs/*.pdf
 gost-chat/docs/*.pdf
-indexator/indexator/testdocs/*.pdf
+indexator/testdocs/*.pdf
 gost-chat/data/
-indexator/indexator/data/
-indexator/indexator/output/
+indexator/data/
+indexator/output/
 shared/data/
 
 # Qdrant local persistence and lock files
