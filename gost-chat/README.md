@@ -119,6 +119,38 @@ Copy-Item .env.example .env
 
 Когда CUDA доступна, `GOST_CHAT_EMBEDDING_DEVICE=auto` и `GOST_CHAT_RERANKER_DEVICE=auto` resolve to `cuda`. Если check печатает `False`, установлен CPU-only Torch или NVIDIA driver не виден Python.
 
+## Desktop window launcher
+
+The desktop launcher is an optional PyWebView shell around the same local FastAPI web app. It starts the existing backend command, waits for `http://127.0.0.1:8000/health`, and opens the same UI in a native desktop window. The browser workflow remains unchanged.
+
+Install the optional dependency:
+
+```powershell
+python -m pip install pywebview
+```
+
+Launch in browser mode:
+
+```powershell
+cd gost-chat
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000
+```
+
+Launch in desktop-window mode:
+
+```powershell
+cd gost-chat
+python run_desktop.py
+```
+
+The desktop window displays the same local URL, so future backend and frontend changes are picked up automatically without a separate desktop UI codepath.
+
 ## Основные настройки `.env`
 
 ```text
