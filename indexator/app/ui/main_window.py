@@ -313,13 +313,19 @@ class MainWindow(QMainWindow):
         self.index_button.setObjectName("indexButton")
         self.clear_selected_button.setObjectName("clearButton")
         self.clear_all_button.setObjectName("clearButton")
+        self.folder_label.setFixedWidth(64)
+        self.select_folder_button.setFixedWidth(118)
+        self.scan_button.setFixedWidth(96)
+        self.preview_button.setFixedWidth(122)
+        self.embed_preview_button.setFixedWidth(112)
+        self.store_preview_button.setFixedWidth(104)
         for button in (
             self.reindex_button,
             self.index_button,
             self.clear_selected_button,
             self.clear_all_button,
         ):
-            button.setFixedWidth(118)
+            button.setFixedWidth(142)
         self.language_button.setFixedWidth(44)
         self._apply_button_styles()
         self.select_folder_button.setGraphicsEffect(self.select_folder_blink_effect)
@@ -332,12 +338,7 @@ class MainWindow(QMainWindow):
         self.select_folder_blink_animation.setEasingCurve(QEasingCurve.Type.InOutSine)
 
         self.pdf_table.setHorizontalHeaderLabels(["Selected", "File name", "Path", "Size", "Pages", "Status"])
-        self.pdf_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self.pdf_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.pdf_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        self.pdf_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        self.pdf_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        self.pdf_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        self._configure_pdf_table_columns()
         self.pdf_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.pdf_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
 
@@ -348,6 +349,20 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.reindex_button.setEnabled(False)
         self.clear_selected_button.setEnabled(False)
+
+    def _configure_pdf_table_columns(self) -> None:
+        header = self.pdf_table.horizontalHeader()
+        header.setStretchLastSection(False)
+        header.setMinimumSectionSize(42)
+        for column in range(self.pdf_table.columnCount()):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.Interactive)
+
+        self.pdf_table.setColumnWidth(0, 64)
+        self.pdf_table.setColumnWidth(1, 170)
+        self.pdf_table.setColumnWidth(2, 560)
+        self.pdf_table.setColumnWidth(3, 90)
+        self.pdf_table.setColumnWidth(4, 60)
+        self.pdf_table.setColumnWidth(5, 130)
 
     def _build_layout(self) -> None:
         root = QWidget(self)
