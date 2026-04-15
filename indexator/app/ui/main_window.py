@@ -84,7 +84,7 @@ class MainWindow(QMainWindow):
         self.folder_path_field.setPlaceholderText("Select a folder with PDF files")
 
         self.select_folder_button = QPushButton("Select Folder")
-        self.scan_button = QPushButton("Scan PDFs")
+        self.scan_button = QPushButton("Refresh scan")
         self.preview_button = QPushButton("Preview blocks")
         self.embed_preview_button = QPushButton("Embed preview")
         self.store_preview_button = QPushButton("Store preview")
@@ -185,36 +185,22 @@ class MainWindow(QMainWindow):
 
         self.folder_path_field.setText(folder)
         self._append_log(f"Selected folder: {folder}")
+        self._scan_pdfs()
 
     def _scan_pdfs(self) -> None:
         folder = self.folder_path_field.text().strip()
         if not folder:
             self._append_log("Select a folder before scanning.")
             return
+        if self.active_index_thread is not None:
+            self._append_log("Background operation is already running.")
+            return
 
         self.pdf_table.setRowCount(0)
         self.progress_bar.setValue(0)
         self.current_scan_folder = Path(folder)
         self._append_log(f"Scanning PDF files in: {folder}")
-        self._set_scan_controls_enabled(False)
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-
-        try:
-            results = self.pdf_scanner.scan(Path(folder))
-        except OSError as error:
-            self._append_log(f"Scan failed: {error}")
-            return
-        finally:
-            QApplication.restoreOverrideCursor()
-            self._set_scan_controls_enabled(True)
-
-        self._populate_pdf_table(results)
-        self.progress_bar.setValue(100)
-
-        unreadable_count = sum(1 for result in results if result.status != "Ready")
-        self._append_log(f"Found {len(results)} PDF file(s).")
-        if unreadable_count:
-            self._append_log(f"{unreadable_count} PDF file(s) could not be read.")
+        self._start_index_worker("scan", scan_folder=Path(folder))
 
     def _index_selected(self) -> None:
         selected_rows = self._checked_pdf_rows()
@@ -271,6 +257,7 @@ class MainWindow(QMainWindow):
         mode: str,
         pdf_paths: list[Path] | None = None,
         document_ids: list[str] | None = None,
+        scan_folder: Path | None = None,
     ) -> None:
         if self.active_index_thread is not None:
             self._append_log("Background operation is already running.")
@@ -281,6 +268,8 @@ class MainWindow(QMainWindow):
             mode=mode,
             pdf_paths=pdf_paths,
             document_ids=document_ids,
+            scan_folder=scan_folder,
+            pdf_scanner=self.pdf_scanner,
             parser=self.pdf_parser,
             block_builder=self.block_builder,
             embedding_service=self.embedding_service,
@@ -326,7 +315,18 @@ class MainWindow(QMainWindow):
         summary = result.get("summary")
         summary_path = result.get("summary_path")
 
-        if mode == "index" and isinstance(summary, IndexingRunSummary):
+        if mode == "scan":
+            scan_results = result.get("scan_results")
+            scan_folder = result.get("scan_folder")
+            if isinstance(scan_results, list):
+                if isinstance(scan_folder, Path):
+                    self.current_scan_folder = scan_folder
+                self._populate_pdf_table(scan_results)
+                unreadable_count = sum(1 for scan_result in scan_results if scan_result.status != "Ready")
+                self._append_log(f"Found {len(scan_results)} PDF file(s).")
+                if unreadable_count:
+                    self._append_log(f"{unreadable_count} PDF file(s) could not be read.")
+        elif mode == "index" and isinstance(summary, IndexingRunSummary):
             self._append_indexing_summary(summary)
             self._append_log(f"Indexing summary export: {summary_path}")
         elif mode == "reindex" and isinstance(summary, ReindexRunSummary):
@@ -588,6 +588,7 @@ class MainWindow(QMainWindow):
     def _handle_indexing_progress(self, progress: IndexingProgress) -> None:
         stage_messages = {
             "parse": "Parsing",
+            "scan": "Scanning PDFs",
             "build_blocks": "Building structured blocks",
             "embed": "Embedding structured blocks",
             "store": "Storing vectors in local Qdrant",
@@ -602,6 +603,7 @@ class MainWindow(QMainWindow):
 
         stage_offsets = {
             "parse": 0.10,
+            "scan": 0.50,
             "build_blocks": 0.30,
             "embed": 0.60,
             "store": 0.85,

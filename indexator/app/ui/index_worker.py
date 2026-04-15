@@ -12,6 +12,7 @@ from app.core.pipeline import IndexingPipeline, IndexingProgress
 from app.parsing.pdf_parser import PdfParser
 from app.services.deletion_service import IndexDeletionService
 from app.services.embedding_service import StructuredBlockEmbeddingService
+from app.services.pdf_scanner import PdfScanner
 from app.services.reindex_service import ReindexService
 from app.storage.qdrant_store import QdrantStore
 from app.utils.debug_export import (
@@ -36,6 +37,8 @@ class IndexWorker(QObject):
         mode: str,
         pdf_paths: list[Path] | None,
         document_ids: list[str] | None,
+        scan_folder: Path | None,
+        pdf_scanner: PdfScanner,
         parser: PdfParser,
         block_builder: StructuredBlockBuilder,
         embedding_service: StructuredBlockEmbeddingService,
@@ -50,6 +53,8 @@ class IndexWorker(QObject):
         self.mode = mode
         self.pdf_paths = pdf_paths or []
         self.document_ids = document_ids or []
+        self.scan_folder = scan_folder
+        self.pdf_scanner = pdf_scanner
         self.parser = parser
         self.block_builder = block_builder
         self.embedding_service = embedding_service
@@ -64,7 +69,9 @@ class IndexWorker(QObject):
     def run(self) -> None:
         """Execute the selected heavy operation and report results with signals."""
         try:
-            if self.mode == "index":
+            if self.mode == "scan":
+                result = self._run_scan()
+            elif self.mode == "index":
                 result = self._run_index()
             elif self.mode == "reindex":
                 result = self._run_reindex()
@@ -94,6 +101,14 @@ class IndexWorker(QObject):
         )
         summary_path = export_indexing_summary(summary, self.output_dir / "last_indexing_summary.json")
         return {"summary": summary, "summary_path": summary_path}
+
+    def _run_scan(self) -> dict[str, object]:
+        if self.scan_folder is None:
+            raise ValueError("Scan mode requires a folder path.")
+        self._report(str(self.scan_folder), 1, 1, "scan")
+        results = self.pdf_scanner.scan(self.scan_folder)
+        self._report(str(self.scan_folder), 1, 1, "done")
+        return {"scan_folder": self.scan_folder, "scan_results": results}
 
     def _run_reindex(self) -> dict[str, object]:
         self.log_message.emit(f"Reindex embedding device: {self.embedding_device}")
