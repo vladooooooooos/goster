@@ -6,11 +6,12 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from PySide6.QtCore import QThread, Qt
+from PySide6.QtCore import QAbstractAnimation, QEasingCurve, QPropertyAnimation, QThread, Qt
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -92,6 +93,8 @@ class MainWindow(QMainWindow):
         self.reindex_button = QPushButton("Reindex selected")
         self.clear_selected_button = QPushButton("Clear selected")
         self.clear_all_button = QPushButton("Clear all")
+        self.select_folder_blink_effect = QGraphicsOpacityEffect(self.select_folder_button)
+        self.select_folder_blink_animation = QPropertyAnimation(self.select_folder_blink_effect, b"opacity", self)
 
         self.pdf_table = QTableWidget(0, 6)
         self.log_panel = QPlainTextEdit()
@@ -100,11 +103,38 @@ class MainWindow(QMainWindow):
         self._configure_widgets()
         self._build_layout()
         self._connect_signals()
+        self._update_select_folder_attention()
         self._append_log("Indexator shell started.")
         self._append_log(f"Python runtime: {sys.executable}")
         self._append_log(f"Embedding device: {self.embedding_service.embedder.describe_device_runtime()}")
 
     def _configure_widgets(self) -> None:
+        self.select_folder_button.setObjectName("selectFolderButton")
+        self.scan_button.setObjectName("refreshScanButton")
+        self.preview_button.setObjectName("previewButton")
+        self.embed_preview_button.setObjectName("previewButton")
+        self.store_preview_button.setObjectName("previewButton")
+        self.reindex_button.setObjectName("reindexButton")
+        self.index_button.setObjectName("indexButton")
+        self.clear_selected_button.setObjectName("clearButton")
+        self.clear_all_button.setObjectName("clearButton")
+        for button in (
+            self.reindex_button,
+            self.index_button,
+            self.clear_selected_button,
+            self.clear_all_button,
+        ):
+            button.setFixedWidth(118)
+        self._apply_button_styles()
+        self.select_folder_button.setGraphicsEffect(self.select_folder_blink_effect)
+        self.select_folder_blink_effect.setOpacity(1.0)
+        self.select_folder_blink_animation.setKeyValueAt(0.0, 1.0)
+        self.select_folder_blink_animation.setKeyValueAt(0.5, 0.42)
+        self.select_folder_blink_animation.setKeyValueAt(1.0, 1.0)
+        self.select_folder_blink_animation.setDuration(900)
+        self.select_folder_blink_animation.setLoopCount(-1)
+        self.select_folder_blink_animation.setEasingCurve(QEasingCurve.Type.InOutSine)
+
         self.pdf_table.setHorizontalHeaderLabels(["Selected", "File name", "Path", "Size", "Pages", "Status"])
         self.pdf_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.pdf_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -138,10 +168,20 @@ class MainWindow(QMainWindow):
         action_layout.addWidget(self.embed_preview_button)
         action_layout.addWidget(self.store_preview_button)
         action_layout.addStretch(1)
-        action_layout.addWidget(self.reindex_button)
-        action_layout.addWidget(self.clear_selected_button)
-        action_layout.addWidget(self.clear_all_button)
-        action_layout.addWidget(self.index_button)
+
+        right_action_layout = QVBoxLayout()
+
+        index_layout = QHBoxLayout()
+        index_layout.addWidget(self.reindex_button)
+        index_layout.addWidget(self.index_button)
+
+        clear_layout = QHBoxLayout()
+        clear_layout.addWidget(self.clear_selected_button)
+        clear_layout.addWidget(self.clear_all_button)
+
+        right_action_layout.addLayout(index_layout)
+        right_action_layout.addLayout(clear_layout)
+        action_layout.addLayout(right_action_layout)
 
         main_layout.addLayout(folder_layout)
         main_layout.addLayout(action_layout)
@@ -185,7 +225,79 @@ class MainWindow(QMainWindow):
 
         self.folder_path_field.setText(folder)
         self._append_log(f"Selected folder: {folder}")
+        self._update_select_folder_attention()
         self._scan_pdfs()
+
+    def _apply_button_styles(self) -> None:
+        self.setStyleSheet(
+            """
+            QPushButton {
+                border: 1px solid rgba(255, 255, 255, 38);
+                border-radius: 4px;
+                padding: 5px 10px;
+                font-weight: 600;
+            }
+            QPushButton:disabled {
+                background-color: #24282d;
+                color: #6e7681;
+                border-color: rgba(255, 255, 255, 18);
+            }
+            QPushButton#selectFolderButton {
+                background-color: #3a4656;
+                color: #f2f7ff;
+                border-color: #7893b8;
+            }
+            QPushButton#selectFolderButton:pressed {
+                background-color: #242d39;
+            }
+            QPushButton#refreshScanButton {
+                background-color: #3b5f9f;
+                color: #ffffff;
+            }
+            QPushButton#refreshScanButton:pressed {
+                background-color: #253e6d;
+            }
+            QPushButton#previewButton {
+                background-color: #6b4f9f;
+                color: #ffffff;
+            }
+            QPushButton#previewButton:pressed {
+                background-color: #46366e;
+            }
+            QPushButton#reindexButton {
+                background-color: #c7a646;
+                color: #1d1703;
+            }
+            QPushButton#reindexButton:pressed {
+                background-color: #806824;
+                color: #fff1bd;
+            }
+            QPushButton#indexButton {
+                background-color: #7fae55;
+                color: #0f1d08;
+            }
+            QPushButton#indexButton:pressed {
+                background-color: #4f7232;
+                color: #ecffd8;
+            }
+            QPushButton#clearButton {
+                background-color: #b64c4c;
+                color: #ffffff;
+            }
+            QPushButton#clearButton:pressed {
+                background-color: #793030;
+            }
+            """
+        )
+
+    def _update_select_folder_attention(self) -> None:
+        if self.folder_path_field.text().strip():
+            self.select_folder_blink_animation.stop()
+            self.select_folder_blink_effect.setOpacity(1.0)
+            return
+
+        if self.select_folder_blink_animation.state() != QAbstractAnimation.State.Running:
+            self.select_folder_blink_animation.start()
 
     def _scan_pdfs(self) -> None:
         folder = self.folder_path_field.text().strip()
