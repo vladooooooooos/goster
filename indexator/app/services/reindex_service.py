@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 
-from app.core.pipeline import IndexingPipeline
+from app.core.pipeline import IndexingPipeline, IndexingProgress, ProgressCallback
 from app.services.deletion_service import IndexDeletionService
 from app.services.file_fingerprint import FileFingerprintService
 from app.storage.document_registry import DocumentRegistry, IndexedDocumentRecord
@@ -56,13 +56,18 @@ class ReindexService:
         self.registry = registry
         self.fingerprint_service = fingerprint_service or FileFingerprintService()
 
-    def reindex_pdfs(self, pdf_paths: list[Path]) -> ReindexRunSummary:
+    def reindex_pdfs(
+        self,
+        pdf_paths: list[Path],
+        progress_callback: ProgressCallback | None = None,
+    ) -> ReindexRunSummary:
         """Force reindex selected PDFs one by one."""
         start_time = perf_counter()
         records_before = self.registry.load_documents()
         results: list[ReindexDocumentResult] = []
 
-        for pdf_path in pdf_paths:
+        total_documents = len(pdf_paths)
+        for document_index, pdf_path in enumerate(pdf_paths, start=1):
             if not pdf_path.exists() or not pdf_path.is_file():
                 results.append(
                     ReindexDocumentResult(
@@ -102,7 +107,14 @@ class ReindexService:
                     )
                     continue
 
-            indexing_summary = self.indexing_pipeline.index_pdfs([pdf_path])
+            indexing_summary = self.indexing_pipeline.index_pdfs(
+                [pdf_path],
+                progress_callback=self._make_reindex_progress_callback(
+                    progress_callback,
+                    document_index,
+                    total_documents,
+                ),
+            )
             indexing_result = indexing_summary.results[0] if indexing_summary.results else None
             if indexing_result is None or not indexing_result.success:
                 self._record_index_error(pdf_path, document_id, indexing_result)
@@ -156,6 +168,27 @@ class ReindexService:
         from app.core.block_builder import make_document_id
 
         return make_document_id(pdf_path)
+
+    def _make_reindex_progress_callback(
+        self,
+        progress_callback: ProgressCallback | None,
+        document_index: int,
+        total_documents: int,
+    ) -> ProgressCallback | None:
+        if progress_callback is None:
+            return None
+
+        def report(progress: IndexingProgress) -> None:
+            progress_callback(
+                IndexingProgress(
+                    file_name=progress.file_name,
+                    current_file=document_index,
+                    total_files=total_documents,
+                    stage=progress.stage,
+                )
+            )
+
+        return report
 
     def _record_index_error(self, pdf_path: Path, document_id: str, indexing_result: object) -> None:
         error_message = getattr(indexing_result, "error_message", None) or "Indexing failed."

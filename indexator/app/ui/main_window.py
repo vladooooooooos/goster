@@ -6,7 +6,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QThread, Qt
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -38,13 +38,8 @@ from app.services.pdf_scanner import PdfScanner, PdfScanResult
 from app.services.reindex_service import ReindexRunSummary, ReindexService
 from app.storage.document_registry import DocumentRegistry
 from app.storage.qdrant_store import QdrantStore
+from app.ui.index_worker import IndexWorker
 from app.utils.config import AppConfig
-from app.utils.debug_export import (
-    export_blocks_jsonl,
-    export_embedding_summary,
-    export_indexing_summary,
-    export_qdrant_storage_summary,
-)
 
 
 class MainWindow(QMainWindow):
@@ -79,6 +74,8 @@ class MainWindow(QMainWindow):
         )
         self.output_dir = self.app_root / "output"
         self.current_scan_folder: Path | None = None
+        self.active_index_thread: QThread | None = None
+        self.active_index_worker: IndexWorker | None = None
         self.setWindowTitle(config.app.name)
         self.resize(config.ui.window_width, config.ui.window_height)
 
@@ -169,6 +166,15 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Release local resources before the desktop window closes."""
+        if self.active_index_thread is not None:
+            QMessageBox.warning(
+                self,
+                "Background operation is running",
+                "Wait until the current background operation finishes before closing Indexator.",
+            )
+            event.ignore()
+            return
+
         self.qdrant_store.close()
         super().closeEvent(event)
 
@@ -226,23 +232,7 @@ class MainWindow(QMainWindow):
 
         self.progress_bar.setValue(0)
         self._append_log(f"Indexing selected PDF file(s): {len(pdf_paths)}.")
-        self._set_scan_controls_enabled(False)
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-
-        try:
-            summary = self.indexing_pipeline.index_pdfs(
-                pdf_paths,
-                progress_callback=self._handle_indexing_progress,
-            )
-        finally:
-            QApplication.restoreOverrideCursor()
-            self._set_scan_controls_enabled(True)
-            self.progress_bar.setValue(100)
-
-        self._append_indexing_summary(summary)
-        debug_path = export_indexing_summary(summary, self.output_dir / "last_indexing_summary.json")
-        self._append_log(f"Indexing summary export: {debug_path}")
-        self._refresh_indexed_statuses()
+        self._start_index_worker("index", pdf_paths=pdf_paths)
 
     def _reindex_selected(self) -> None:
         selected_rows = self._checked_pdf_rows()
@@ -274,21 +264,130 @@ class MainWindow(QMainWindow):
 
         self.progress_bar.setValue(0)
         self._append_log(f"Reindexing selected PDF file(s): {len(pdf_paths)}.")
-        self._append_log(f"Reindex embedding device: {self.embedding_service.embedder.describe_device_runtime()}")
+        self._start_index_worker("reindex", pdf_paths=pdf_paths)
+
+    def _start_index_worker(
+        self,
+        mode: str,
+        pdf_paths: list[Path] | None = None,
+        document_ids: list[str] | None = None,
+    ) -> None:
+        if self.active_index_thread is not None:
+            self._append_log("Background operation is already running.")
+            return
+
+        thread = QThread(self)
+        worker = IndexWorker(
+            mode=mode,
+            pdf_paths=pdf_paths,
+            document_ids=document_ids,
+            parser=self.pdf_parser,
+            block_builder=self.block_builder,
+            embedding_service=self.embedding_service,
+            qdrant_store=self.qdrant_store,
+            indexing_pipeline=self.indexing_pipeline,
+            reindex_service=self.reindex_service,
+            deletion_service=self.deletion_service,
+            output_dir=self.output_dir,
+            embedding_device=self.embedding_service.embedder.describe_device_runtime(),
+        )
+        worker.moveToThread(thread)
+
+        thread.started.connect(worker.run)
+        worker.progress_changed.connect(self._handle_indexing_progress)
+        worker.log_message.connect(self._append_log)
+        worker.file_finished.connect(self._handle_index_worker_file_finished)
+        worker.finished.connect(self._handle_index_worker_finished)
+        worker.error.connect(self._handle_index_worker_error)
+        worker.finished.connect(thread.quit)
+        worker.error.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        worker.error.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._clear_index_worker_refs)
+
+        self.active_index_thread = thread
+        self.active_index_worker = worker
         self._set_scan_controls_enabled(False)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        thread.start()
 
-        try:
-            summary = self.reindex_service.reindex_pdfs(pdf_paths)
-            summary_path = self.reindex_service.export_summary(summary, "last_reindex_summary.json")
-        finally:
-            QApplication.restoreOverrideCursor()
-            self._set_scan_controls_enabled(True)
-            self.progress_bar.setValue(100)
+    def _handle_index_worker_finished(self, mode: str, result: object, _unused: object) -> None:
+        QApplication.restoreOverrideCursor()
+        self._set_scan_controls_enabled(True)
+        self.progress_bar.setValue(100)
 
-        self._append_reindex_summary(summary)
-        self._append_log(f"Reindex summary export: {summary_path}")
-        self._refresh_indexed_statuses()
+        if not isinstance(result, dict):
+            self._append_log(f"Finished {mode} operation with unexpected result type.")
+            if self._should_refresh_indexed_statuses(mode):
+                self._refresh_indexed_statuses()
+            return
+
+        summary = result.get("summary")
+        summary_path = result.get("summary_path")
+
+        if mode == "index" and isinstance(summary, IndexingRunSummary):
+            self._append_indexing_summary(summary)
+            self._append_log(f"Indexing summary export: {summary_path}")
+        elif mode == "reindex" and isinstance(summary, ReindexRunSummary):
+            self._append_reindex_summary(summary)
+            self._append_log(f"Reindex summary export: {summary_path}")
+        elif mode == "preview":
+            parsed_document = result.get("parsed_document")
+            structured_blocks = result.get("structured_blocks")
+            if isinstance(parsed_document, ParsedDocument) and isinstance(structured_blocks, list):
+                self._append_parsed_preview(parsed_document)
+                self._append_structured_block_preview(structured_blocks)
+                self._append_log(f"Structured block debug export: {result.get('debug_path')}")
+        elif mode == "embed_preview":
+            embedding_run = result.get("embedding_run")
+            if embedding_run is not None:
+                self._append_log(
+                    f"Embedded {len(embedding_run.embeddings)} block(s) with {embedding_run.model_name}: "
+                    f"dimension={embedding_run.embedding_dimension}, device={embedding_run.device}, "
+                    f"elapsed={embedding_run.elapsed_seconds:.2f}s."
+                )
+                self._append_log(f"Embedding debug summary export: {result.get('debug_path')}")
+        elif mode == "store_preview":
+            storage_run = result.get("storage_run")
+            pdf_path = result.get("pdf_path")
+            if storage_run is not None and isinstance(pdf_path, Path):
+                self._append_log(
+                    f"Stored {storage_run.stored_blocks} block(s) from {pdf_path.name} in local Qdrant: "
+                    f"collection={storage_run.collection_name}, dimension={storage_run.embedding_dimension}, "
+                    f"path={storage_run.local_path}, elapsed={storage_run.elapsed_seconds:.2f}s."
+                )
+                self._append_log(f"Local Qdrant storage summary export: {result.get('debug_path')}")
+        elif mode == "clear_selected" and isinstance(summary, ClearOperationSummary):
+            self._append_clear_summary(summary)
+            self._append_log(f"Clear selected summary export: {summary_path}")
+        elif mode == "clear_all" and isinstance(summary, ClearOperationSummary):
+            self._append_clear_summary(summary)
+            self._append_log(f"Clear all summary export: {summary_path}")
+        else:
+            self._append_log(f"Finished {mode} operation with unexpected result payload.")
+
+        if self._should_refresh_indexed_statuses(mode):
+            self._refresh_indexed_statuses()
+
+    def _handle_index_worker_error(self, mode: str, message: str, details: str) -> None:
+        QApplication.restoreOverrideCursor()
+        self._set_scan_controls_enabled(True)
+        self.progress_bar.setValue(100)
+        self._append_log(f"{mode.capitalize()} operation failed: {message}")
+        self._append_log(details.rstrip())
+        if self._should_refresh_indexed_statuses(mode):
+            self._refresh_indexed_statuses()
+
+    def _handle_index_worker_file_finished(self, _file_name: str) -> None:
+        return
+
+    def _clear_index_worker_refs(self) -> None:
+        self.active_index_thread = None
+        self.active_index_worker = None
+
+    def _should_refresh_indexed_statuses(self, mode: str) -> bool:
+        return mode in {"index", "reindex", "clear_selected", "clear_all"}
 
     def _preview_selected_pdf(self) -> None:
         pdf_path = self._first_selected_pdf_path()
@@ -297,26 +396,8 @@ class MainWindow(QMainWindow):
             return
 
         self._append_log(f"Parsing preview for: {pdf_path.name}")
-        self._set_scan_controls_enabled(False)
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-
-        try:
-            parsed_document = self.pdf_parser.parse(pdf_path)
-            structured_blocks = self.block_builder.build(parsed_document)
-        except Exception as error:
-            self._append_log(f"Parse failed for {pdf_path.name}: {error}")
-            return
-        finally:
-            QApplication.restoreOverrideCursor()
-            self._set_scan_controls_enabled(True)
-
-        self._append_parsed_preview(parsed_document)
-        self._append_structured_block_preview(structured_blocks)
-        debug_path = export_blocks_jsonl(
-            structured_blocks,
-            self.output_dir / f"{pdf_path.stem}_structured_blocks.jsonl",
-        )
-        self._append_log(f"Structured block debug export: {debug_path}")
+        self.progress_bar.setValue(0)
+        self._start_index_worker("preview", pdf_paths=[pdf_path])
 
     def _embed_selected_pdf_preview(self) -> None:
         pdf_path = self._first_selected_pdf_path()
@@ -325,30 +406,8 @@ class MainWindow(QMainWindow):
             return
 
         self._append_log(f"Embedding structured block preview for: {pdf_path.name}")
-        self._set_scan_controls_enabled(False)
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-
-        try:
-            parsed_document = self.pdf_parser.parse(pdf_path)
-            structured_blocks = self.block_builder.build(parsed_document)
-            embedding_run = self.embedding_service.embed_blocks(structured_blocks)
-        except Exception as error:
-            self._append_log(f"Embedding preview failed for {pdf_path.name}: {error}")
-            return
-        finally:
-            QApplication.restoreOverrideCursor()
-            self._set_scan_controls_enabled(True)
-
-        self._append_log(
-            f"Embedded {len(embedding_run.embeddings)} block(s) with {embedding_run.model_name}: "
-            f"dimension={embedding_run.embedding_dimension}, device={embedding_run.device}, "
-            f"elapsed={embedding_run.elapsed_seconds:.2f}s."
-        )
-        debug_path = export_embedding_summary(
-            embedding_run,
-            self.output_dir / f"{pdf_path.stem}_embedding_summary.json",
-        )
-        self._append_log(f"Embedding debug summary export: {debug_path}")
+        self.progress_bar.setValue(0)
+        self._start_index_worker("embed_preview", pdf_paths=[pdf_path])
 
     def _store_selected_pdf_preview(self) -> None:
         pdf_path = self._first_selected_pdf_path()
@@ -357,31 +416,8 @@ class MainWindow(QMainWindow):
             return
 
         self._append_log(f"Storing structured block preview in local Qdrant for: {pdf_path.name}")
-        self._set_scan_controls_enabled(False)
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-
-        try:
-            parsed_document = self.pdf_parser.parse(pdf_path)
-            structured_blocks = self.block_builder.build(parsed_document)
-            embedding_run = self.embedding_service.embed_blocks(structured_blocks)
-            storage_run = self.qdrant_store.upsert_block_embeddings(structured_blocks, embedding_run)
-        except Exception as error:
-            self._append_log(f"Local Qdrant storage preview failed for {pdf_path.name}: {error}")
-            return
-        finally:
-            QApplication.restoreOverrideCursor()
-            self._set_scan_controls_enabled(True)
-
-        self._append_log(
-            f"Stored {storage_run.stored_blocks} block(s) from {pdf_path.name} in local Qdrant: "
-            f"collection={storage_run.collection_name}, dimension={storage_run.embedding_dimension}, "
-            f"path={storage_run.local_path}, elapsed={storage_run.elapsed_seconds:.2f}s."
-        )
-        debug_path = export_qdrant_storage_summary(
-            storage_run,
-            self.output_dir / f"{pdf_path.stem}_qdrant_storage_summary.json",
-        )
-        self._append_log(f"Local Qdrant storage summary export: {debug_path}")
+        self.progress_bar.setValue(0)
+        self._start_index_worker("store_preview", pdf_paths=[pdf_path])
 
     def _append_log(self, message: str) -> None:
         self.log_panel.appendPlainText(message)
@@ -555,6 +591,7 @@ class MainWindow(QMainWindow):
             "build_blocks": "Building structured blocks",
             "embed": "Embedding structured blocks",
             "store": "Storing vectors in local Qdrant",
+            "clear": "Clearing index data",
             "done": "Finished",
             "failed": "Failed",
         }
@@ -568,12 +605,12 @@ class MainWindow(QMainWindow):
             "build_blocks": 0.30,
             "embed": 0.60,
             "store": 0.85,
+            "clear": 0.50,
             "done": 1.0,
             "failed": 1.0,
         }
         file_fraction = (progress.current_file - 1 + stage_offsets.get(progress.stage, 0.0)) / progress.total_files
         self.progress_bar.setValue(max(0, min(100, int(file_fraction * 100))))
-        QApplication.processEvents()
 
     def _append_indexing_summary(self, summary: IndexingRunSummary) -> None:
         for result in summary.results:
@@ -630,20 +667,7 @@ class MainWindow(QMainWindow):
 
         self.progress_bar.setValue(0)
         self._append_log(f"Clearing selected document(s): {len(document_ids)}.")
-        self._set_scan_controls_enabled(False)
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-
-        try:
-            summary = self.deletion_service.clear_selected(document_ids)
-            summary_path = self.deletion_service.export_summary(summary, "last_clear_selected_summary.json")
-        finally:
-            QApplication.restoreOverrideCursor()
-            self._set_scan_controls_enabled(True)
-            self.progress_bar.setValue(100)
-
-        self._append_clear_summary(summary)
-        self._append_log(f"Clear selected summary export: {summary_path}")
-        self._refresh_indexed_statuses()
+        self._start_index_worker("clear_selected", document_ids=document_ids)
 
     def _clear_all(self) -> None:
         shared_root = self.document_registry.shared_data_root
@@ -665,20 +689,7 @@ class MainWindow(QMainWindow):
 
         self.progress_bar.setValue(0)
         self._append_log(f"Clearing all shared index data under: {shared_root}")
-        self._set_scan_controls_enabled(False)
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-
-        try:
-            summary = self.deletion_service.clear_all()
-            summary_path = self.deletion_service.export_summary(summary, "last_clear_all_summary.json")
-        finally:
-            QApplication.restoreOverrideCursor()
-            self._set_scan_controls_enabled(True)
-            self.progress_bar.setValue(100)
-
-        self._append_clear_summary(summary)
-        self._append_log(f"Clear all summary export: {summary_path}")
-        self._refresh_indexed_statuses()
+        self._start_index_worker("clear_all")
 
     def _checked_document_ids(self) -> list[str]:
         document_ids: list[str] = []
