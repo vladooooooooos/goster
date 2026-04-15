@@ -43,6 +43,195 @@ from app.ui.index_worker import IndexWorker
 from app.utils.config import AppConfig
 
 
+TRANSLATIONS = {
+    "en": {
+        "language_toggle": "RU",
+        "folder_label": "PDF folder:",
+        "folder_placeholder": "Select a folder with PDF files",
+        "select_folder": "Select Folder",
+        "refresh_scan": "Refresh scan",
+        "preview_blocks": "Preview blocks",
+        "embed_preview": "Embed preview",
+        "store_preview": "Store preview",
+        "index_selected": "Index selected",
+        "reindex_selected": "Reindex selected",
+        "clear_selected": "Clear selected",
+        "clear_all": "Clear all",
+        "logs_label": "Logs:",
+        "logs_placeholder": "Logs will appear here",
+        "table_selected": "Selected",
+        "table_file_name": "File name",
+        "table_path": "Path",
+        "table_size": "Size",
+        "table_pages": "Pages",
+        "table_status": "Status",
+        "status_ready": "Ready",
+        "status_indexed": "Indexed",
+        "status_indexed_stale": "Indexed (stale)",
+        "status_missing_source": "Missing source",
+        "status_index_error": "Index error",
+        "status_unreadable": "Unreadable",
+        "app_started": "Indexator shell started.",
+        "runtime": "Python runtime: {runtime}",
+        "embedding_device": "Embedding device: {device}",
+        "select_folder_title": "Select PDF folder",
+        "selected_folder": "Selected folder: {folder}",
+        "select_folder_before_scan": "Select a folder before scanning.",
+        "background_running": "Background operation is already running.",
+        "scanning_folder": "Scanning PDF files in: {folder}",
+        "found_pdfs": "Found {count} PDF file(s).",
+        "unreadable_pdfs": "{count} PDF file(s) could not be read.",
+        "close_running_title": "Background operation is running",
+        "close_running_message": "Wait until the current background operation finishes before closing Indexator.",
+        "no_index_selection": "No PDF files selected for indexing.",
+        "skipped_not_ready": "Skipped {count} selected file(s) that are not ready.",
+        "no_ready_files": "No Ready PDF files selected for indexing.",
+        "indexing_selected": "Indexing selected PDF file(s): {count}.",
+        "no_reindex_selection": "No PDF files selected for reindexing.",
+        "skipped_not_reindexable": "Skipped {count} selected file(s) that are not available for reindexing.",
+        "no_reindexable_files": "No available checked PDF files selected for reindexing.",
+        "reindex_question_title": "Reindex selected documents",
+        "reindex_question_message": (
+            "Force reindex {count} checked document(s)?\n\n"
+            "Existing indexed data for those documents will be replaced. Source PDFs will not be deleted."
+        ),
+        "reindex_cancelled": "Reindex selected cancelled.",
+        "reindexing_selected": "Reindexing selected PDF file(s): {count}.",
+        "no_preview_selection": "Select one ready PDF file before previewing blocks.",
+        "parsing_preview": "Parsing preview for: {file_name}",
+        "no_embed_selection": "Select one ready PDF file before embedding blocks.",
+        "embedding_preview": "Embedding structured block preview for: {file_name}",
+        "no_store_selection": "Select one ready PDF file before storing blocks.",
+        "storing_preview": "Storing structured block preview in local Qdrant for: {file_name}",
+        "no_clear_selection": "No checked PDF files selected for clearing.",
+        "clear_selected_title": "Clear selected indexed documents",
+        "clear_selected_message": (
+            "Remove checked indexed data for {count} selected document(s)?\n\n"
+            "Files that are not indexed will be skipped and reported.\n"
+            "Source PDFs will not be deleted."
+        ),
+        "clear_selected_cancelled": "Clear selected cancelled.",
+        "clearing_selected": "Clearing selected document(s): {count}.",
+        "clear_all_title": "Clear all shared index data",
+        "clear_all_message": (
+            "This will wipe the whole shared local index for Indexator and chat retrieval.\n\n"
+            "Shared index root: {shared_root}\n"
+            "Qdrant collection: {collection}\n\n"
+            "Only index-owned data will be removed. Source PDFs will not be deleted."
+        ),
+        "clear_all_cancelled": "Clear all cancelled.",
+        "clearing_all": "Clearing all shared index data under: {shared_root}",
+        "stage_parse": "Parsing",
+        "stage_scan": "Scanning PDFs",
+        "stage_build_blocks": "Building structured blocks",
+        "stage_embed": "Embedding structured blocks",
+        "stage_store": "Storing vectors in local Qdrant",
+        "stage_clear": "Clearing index data",
+        "stage_done": "Finished",
+        "stage_failed": "Failed",
+        "yes": "Yes",
+        "no": "No",
+    },
+    "ru": {
+        "language_toggle": "EN",
+        "folder_label": "Папка PDF:",
+        "folder_placeholder": "Выберите папку с PDF-файлами",
+        "select_folder": "Выбрать папку",
+        "refresh_scan": "Обновить",
+        "preview_blocks": "Предпросмотр",
+        "embed_preview": "Эмбеддинг",
+        "store_preview": "Сохранить",
+        "index_selected": "Индексировать",
+        "reindex_selected": "Переиндекс.",
+        "clear_selected": "Очистить выбран.",
+        "clear_all": "Очистить всё",
+        "logs_label": "Логи:",
+        "logs_placeholder": "Здесь будут появляться логи",
+        "table_selected": "Выбор",
+        "table_file_name": "Файл",
+        "table_path": "Путь",
+        "table_size": "Размер",
+        "table_pages": "Стр.",
+        "table_status": "Статус",
+        "status_ready": "Готов",
+        "status_indexed": "Индексирован",
+        "status_indexed_stale": "Устарел",
+        "status_missing_source": "Файл отсутствует",
+        "status_index_error": "Ошибка индекса",
+        "status_unreadable": "Не читается",
+        "app_started": "Indexator запущен.",
+        "runtime": "Python: {runtime}",
+        "embedding_device": "Устройство эмбеддингов: {device}",
+        "select_folder_title": "Выберите папку с PDF",
+        "selected_folder": "Выбрана папка: {folder}",
+        "select_folder_before_scan": "Сначала выберите папку для сканирования.",
+        "background_running": "Фоновая операция уже выполняется.",
+        "scanning_folder": "Сканирование PDF-файлов в папке: {folder}",
+        "found_pdfs": "Найдено PDF-файлов: {count}.",
+        "unreadable_pdfs": "Не удалось прочитать PDF-файлов: {count}.",
+        "close_running_title": "Фоновая операция выполняется",
+        "close_running_message": "Дождитесь завершения текущей фоновой операции перед закрытием Indexator.",
+        "no_index_selection": "Не выбраны PDF-файлы для индексации.",
+        "skipped_not_ready": "Пропущено выбранных файлов не в статусе готовности: {count}.",
+        "no_ready_files": "Нет выбранных PDF-файлов со статусом готовности.",
+        "indexing_selected": "Индексация выбранных PDF-файлов: {count}.",
+        "no_reindex_selection": "Не выбраны PDF-файлы для переиндексации.",
+        "skipped_not_reindexable": "Пропущено файлов, недоступных для переиндексации: {count}.",
+        "no_reindexable_files": "Нет выбранных доступных PDF-файлов для переиндексации.",
+        "reindex_question_title": "Переиндексировать документы",
+        "reindex_question_message": (
+            "Принудительно переиндексировать выбранные документы: {count}?\n\n"
+            "Старые индексные данные будут заменены. Исходные PDF не будут удалены."
+        ),
+        "reindex_cancelled": "Переиндексация отменена.",
+        "reindexing_selected": "Переиндексация выбранных PDF-файлов: {count}.",
+        "no_preview_selection": "Выберите один готовый PDF-файл для предпросмотра блоков.",
+        "parsing_preview": "Предпросмотр парсинга: {file_name}",
+        "no_embed_selection": "Выберите один готовый PDF-файл для предпросмотра эмбеддингов.",
+        "embedding_preview": "Предпросмотр эмбеддингов для: {file_name}",
+        "no_store_selection": "Выберите один готовый PDF-файл перед сохранением блоков.",
+        "storing_preview": "Сохранение preview-блоков в локальный Qdrant для: {file_name}",
+        "no_clear_selection": "Не выбраны PDF-файлы для очистки.",
+        "clear_selected_title": "Очистить выбранные индексные данные",
+        "clear_selected_message": (
+            "Удалить индексные данные выбранных документов: {count}?\n\n"
+            "Неиндексированные файлы будут пропущены и отражены в отчёте.\n"
+            "Исходные PDF не будут удалены."
+        ),
+        "clear_selected_cancelled": "Очистка выбранного отменена.",
+        "clearing_selected": "Очистка выбранных документов: {count}.",
+        "clear_all_title": "Очистить общий индекс",
+        "clear_all_message": (
+            "Будет очищен общий локальный индекс для Indexator и chat retrieval.\n\n"
+            "Корень общего индекса: {shared_root}\n"
+            "Коллекция Qdrant: {collection}\n\n"
+            "Будут удалены только индексные данные. Исходные PDF не будут удалены."
+        ),
+        "clear_all_cancelled": "Полная очистка отменена.",
+        "clearing_all": "Очистка общих индексных данных: {shared_root}",
+        "stage_parse": "Парсинг",
+        "stage_scan": "Сканирование PDF",
+        "stage_build_blocks": "Построение структурных блоков",
+        "stage_embed": "Расчёт эмбеддингов",
+        "stage_store": "Сохранение в локальный Qdrant",
+        "stage_clear": "Очистка индекса",
+        "stage_done": "Готово",
+        "stage_failed": "Ошибка",
+        "yes": "Да",
+        "no": "Нет",
+    },
+}
+
+STATUS_TRANSLATION_KEYS = {
+    READY: "status_ready",
+    INDEXED: "status_indexed",
+    INDEXED_STALE: "status_indexed_stale",
+    MISSING_SOURCE: "status_missing_source",
+    INDEX_ERROR: "status_index_error",
+    "Unreadable": "status_unreadable",
+}
+
+
 class MainWindow(QMainWindow):
     """Minimal MVP shell for folder selection, scanning, logging, and indexing actions."""
 
@@ -77,39 +266,45 @@ class MainWindow(QMainWindow):
         self.current_scan_folder: Path | None = None
         self.active_index_thread: QThread | None = None
         self.active_index_worker: IndexWorker | None = None
+        self.current_language = "ru"
         self.setWindowTitle(config.app.name)
         self.resize(config.ui.window_width, config.ui.window_height)
 
         self.folder_path_field = QLineEdit()
         self.folder_path_field.setReadOnly(True)
-        self.folder_path_field.setPlaceholderText("Select a folder with PDF files")
+        self.folder_path_field.setPlaceholderText("")
 
-        self.select_folder_button = QPushButton("Select Folder")
-        self.scan_button = QPushButton("Refresh scan")
-        self.preview_button = QPushButton("Preview blocks")
-        self.embed_preview_button = QPushButton("Embed preview")
-        self.store_preview_button = QPushButton("Store preview")
-        self.index_button = QPushButton("Index selected")
-        self.reindex_button = QPushButton("Reindex selected")
-        self.clear_selected_button = QPushButton("Clear selected")
-        self.clear_all_button = QPushButton("Clear all")
+        self.select_folder_button = QPushButton()
+        self.language_button = QPushButton()
+        self.scan_button = QPushButton()
+        self.preview_button = QPushButton()
+        self.embed_preview_button = QPushButton()
+        self.store_preview_button = QPushButton()
+        self.index_button = QPushButton()
+        self.reindex_button = QPushButton()
+        self.clear_selected_button = QPushButton()
+        self.clear_all_button = QPushButton()
         self.select_folder_blink_effect = QGraphicsOpacityEffect(self.select_folder_button)
         self.select_folder_blink_animation = QPropertyAnimation(self.select_folder_blink_effect, b"opacity", self)
 
         self.pdf_table = QTableWidget(0, 6)
         self.log_panel = QPlainTextEdit()
         self.progress_bar = QProgressBar()
+        self.folder_label = QLabel()
+        self.logs_label = QLabel()
 
         self._configure_widgets()
         self._build_layout()
         self._connect_signals()
+        self._apply_language()
         self._update_select_folder_attention()
-        self._append_log("Indexator shell started.")
-        self._append_log(f"Python runtime: {sys.executable}")
-        self._append_log(f"Embedding device: {self.embedding_service.embedder.describe_device_runtime()}")
+        self._append_log(self._text("app_started"))
+        self._append_log(self._text("runtime", runtime=sys.executable))
+        self._append_log(self._text("embedding_device", device=self.embedding_service.embedder.describe_device_runtime()))
 
     def _configure_widgets(self) -> None:
         self.select_folder_button.setObjectName("selectFolderButton")
+        self.language_button.setObjectName("languageButton")
         self.scan_button.setObjectName("refreshScanButton")
         self.preview_button.setObjectName("previewButton")
         self.embed_preview_button.setObjectName("previewButton")
@@ -125,6 +320,7 @@ class MainWindow(QMainWindow):
             self.clear_all_button,
         ):
             button.setFixedWidth(118)
+        self.language_button.setFixedWidth(44)
         self._apply_button_styles()
         self.select_folder_button.setGraphicsEffect(self.select_folder_blink_effect)
         self.select_folder_blink_effect.setOpacity(1.0)
@@ -158,8 +354,9 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout(root)
 
         folder_layout = QHBoxLayout()
-        folder_layout.addWidget(QLabel("PDF folder:"))
+        folder_layout.addWidget(self.folder_label)
         folder_layout.addWidget(self.folder_path_field, stretch=1)
+        folder_layout.addWidget(self.language_button)
         folder_layout.addWidget(self.select_folder_button)
 
         action_layout = QHBoxLayout()
@@ -186,7 +383,7 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(folder_layout)
         main_layout.addLayout(action_layout)
         main_layout.addWidget(self.pdf_table, stretch=3)
-        main_layout.addWidget(QLabel("Logs:"))
+        main_layout.addWidget(self.logs_label)
         main_layout.addWidget(self.log_panel, stretch=1)
         main_layout.addWidget(self.progress_bar)
 
@@ -194,6 +391,7 @@ class MainWindow(QMainWindow):
 
     def _connect_signals(self) -> None:
         self.select_folder_button.clicked.connect(self._select_folder)
+        self.language_button.clicked.connect(self._toggle_language)
         self.scan_button.clicked.connect(self._scan_pdfs)
         self.preview_button.clicked.connect(self._preview_selected_pdf)
         self.embed_preview_button.clicked.connect(self._embed_selected_pdf_preview)
@@ -209,8 +407,8 @@ class MainWindow(QMainWindow):
         if self.active_index_thread is not None:
             QMessageBox.warning(
                 self,
-                "Background operation is running",
-                "Wait until the current background operation finishes before closing Indexator.",
+                self._text("close_running_title"),
+                self._text("close_running_message"),
             )
             event.ignore()
             return
@@ -219,14 +417,60 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
     def _select_folder(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self, "Select PDF folder")
+        folder = QFileDialog.getExistingDirectory(self, self._text("select_folder_title"))
         if not folder:
             return
 
         self.folder_path_field.setText(folder)
-        self._append_log(f"Selected folder: {folder}")
+        self._append_log(self._text("selected_folder", folder=folder))
         self._update_select_folder_attention()
         self._scan_pdfs()
+
+    def _text(self, key: str, **values: object) -> str:
+        template = TRANSLATIONS[self.current_language].get(key, TRANSLATIONS["en"].get(key, key))
+        return template.format(**values)
+
+    def _apply_language(self) -> None:
+        self.folder_label.setText(self._text("folder_label"))
+        self.folder_path_field.setPlaceholderText(self._text("folder_placeholder"))
+        self.language_button.setText(self._text("language_toggle"))
+        self.select_folder_button.setText(self._text("select_folder"))
+        self.scan_button.setText(self._text("refresh_scan"))
+        self.preview_button.setText(self._text("preview_blocks"))
+        self.embed_preview_button.setText(self._text("embed_preview"))
+        self.store_preview_button.setText(self._text("store_preview"))
+        self.index_button.setText(self._text("index_selected"))
+        self.reindex_button.setText(self._text("reindex_selected"))
+        self.clear_selected_button.setText(self._text("clear_selected"))
+        self.clear_all_button.setText(self._text("clear_all"))
+        self.logs_label.setText(self._text("logs_label"))
+        self.log_panel.setPlaceholderText(self._text("logs_placeholder"))
+        self.pdf_table.setHorizontalHeaderLabels(
+            [
+                self._text("table_selected"),
+                self._text("table_file_name"),
+                self._text("table_path"),
+                self._text("table_size"),
+                self._text("table_pages"),
+                self._text("table_status"),
+            ]
+        )
+        self._refresh_table_language()
+
+    def _toggle_language(self) -> None:
+        self.current_language = "en" if self.current_language == "ru" else "ru"
+        self._apply_language()
+
+    def _confirm(self, title: str, message: str, icon: QMessageBox.Icon = QMessageBox.Icon.Question) -> bool:
+        dialog = QMessageBox(self)
+        dialog.setIcon(icon)
+        dialog.setWindowTitle(title)
+        dialog.setText(message)
+        yes_button = dialog.addButton(self._text("yes"), QMessageBox.ButtonRole.YesRole)
+        dialog.addButton(self._text("no"), QMessageBox.ButtonRole.NoRole)
+        dialog.setDefaultButton(yes_button)
+        dialog.exec()
+        return dialog.clickedButton() == yes_button
 
     def _apply_button_styles(self) -> None:
         self.setStyleSheet(
@@ -249,6 +493,14 @@ class MainWindow(QMainWindow):
             }
             QPushButton#selectFolderButton:pressed {
                 background-color: #242d39;
+            }
+            QPushButton#languageButton {
+                background-color: #303741;
+                color: #e6edf5;
+                border-color: #596575;
+            }
+            QPushButton#languageButton:pressed {
+                background-color: #20262e;
             }
             QPushButton#refreshScanButton {
                 background-color: #3b5f9f;
@@ -302,66 +554,59 @@ class MainWindow(QMainWindow):
     def _scan_pdfs(self) -> None:
         folder = self.folder_path_field.text().strip()
         if not folder:
-            self._append_log("Select a folder before scanning.")
+            self._append_log(self._text("select_folder_before_scan"))
             return
         if self.active_index_thread is not None:
-            self._append_log("Background operation is already running.")
+            self._append_log(self._text("background_running"))
             return
 
         self.pdf_table.setRowCount(0)
         self.progress_bar.setValue(0)
         self.current_scan_folder = Path(folder)
-        self._append_log(f"Scanning PDF files in: {folder}")
+        self._append_log(self._text("scanning_folder", folder=folder))
         self._start_index_worker("scan", scan_folder=Path(folder))
 
     def _index_selected(self) -> None:
         selected_rows = self._checked_pdf_rows()
         if not selected_rows:
-            self._append_log("No PDF files selected for indexing.")
+            self._append_log(self._text("no_index_selection"))
             return
 
         pdf_paths = self._checked_pdf_paths_with_statuses({READY})
         skipped_count = len(selected_rows) - len(pdf_paths)
         if skipped_count:
-            self._append_log(f"Skipped {skipped_count} selected file(s) that are not ready.")
+            self._append_log(self._text("skipped_not_ready", count=skipped_count))
         if not pdf_paths:
-            self._append_log("No Ready PDF files selected for indexing.")
+            self._append_log(self._text("no_ready_files"))
             return
 
         self.progress_bar.setValue(0)
-        self._append_log(f"Indexing selected PDF file(s): {len(pdf_paths)}.")
+        self._append_log(self._text("indexing_selected", count=len(pdf_paths)))
         self._start_index_worker("index", pdf_paths=pdf_paths)
 
     def _reindex_selected(self) -> None:
         selected_rows = self._checked_pdf_rows()
         if not selected_rows:
-            self._append_log("No PDF files selected for reindexing.")
+            self._append_log(self._text("no_reindex_selection"))
             return
 
         pdf_paths = self._checked_pdf_paths_with_statuses({READY, INDEXED, INDEXED_STALE})
         skipped_count = len(selected_rows) - len(pdf_paths)
         if skipped_count:
-            self._append_log(f"Skipped {skipped_count} selected file(s) that are not available for reindexing.")
+            self._append_log(self._text("skipped_not_reindexable", count=skipped_count))
         if not pdf_paths:
-            self._append_log("No available checked PDF files selected for reindexing.")
+            self._append_log(self._text("no_reindexable_files"))
             return
 
-        answer = QMessageBox.question(
-            self,
-            "Reindex selected documents",
-            (
-                f"Force reindex {len(pdf_paths)} checked document(s)?\n\n"
-                "Existing indexed data for those documents will be replaced. Source PDFs will not be deleted."
-            ),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            self._append_log("Reindex selected cancelled.")
+        if not self._confirm(
+            self._text("reindex_question_title"),
+            self._text("reindex_question_message", count=len(pdf_paths)),
+        ):
+            self._append_log(self._text("reindex_cancelled"))
             return
 
         self.progress_bar.setValue(0)
-        self._append_log(f"Reindexing selected PDF file(s): {len(pdf_paths)}.")
+        self._append_log(self._text("reindexing_selected", count=len(pdf_paths)))
         self._start_index_worker("reindex", pdf_paths=pdf_paths)
 
     def _start_index_worker(
@@ -372,7 +617,7 @@ class MainWindow(QMainWindow):
         scan_folder: Path | None = None,
     ) -> None:
         if self.active_index_thread is not None:
-            self._append_log("Background operation is already running.")
+            self._append_log(self._text("background_running"))
             return
 
         thread = QThread(self)
@@ -434,10 +679,10 @@ class MainWindow(QMainWindow):
                 if isinstance(scan_folder, Path):
                     self.current_scan_folder = scan_folder
                 self._populate_pdf_table(scan_results)
-                unreadable_count = sum(1 for scan_result in scan_results if scan_result.status != "Ready")
-                self._append_log(f"Found {len(scan_results)} PDF file(s).")
+                unreadable_count = sum(1 for scan_result in scan_results if scan_result.status != READY)
+                self._append_log(self._text("found_pdfs", count=len(scan_results)))
                 if unreadable_count:
-                    self._append_log(f"{unreadable_count} PDF file(s) could not be read.")
+                    self._append_log(self._text("unreadable_pdfs", count=unreadable_count))
         elif mode == "index" and isinstance(summary, IndexingRunSummary):
             self._append_indexing_summary(summary)
             self._append_log(f"Indexing summary export: {summary_path}")
@@ -504,30 +749,30 @@ class MainWindow(QMainWindow):
     def _preview_selected_pdf(self) -> None:
         pdf_path = self._first_selected_pdf_path()
         if not pdf_path:
-            self._append_log("Select one ready PDF file before previewing blocks.")
+            self._append_log(self._text("no_preview_selection"))
             return
 
-        self._append_log(f"Parsing preview for: {pdf_path.name}")
+        self._append_log(self._text("parsing_preview", file_name=pdf_path.name))
         self.progress_bar.setValue(0)
         self._start_index_worker("preview", pdf_paths=[pdf_path])
 
     def _embed_selected_pdf_preview(self) -> None:
         pdf_path = self._first_selected_pdf_path()
         if not pdf_path:
-            self._append_log("Select one ready PDF file before embedding blocks.")
+            self._append_log(self._text("no_embed_selection"))
             return
 
-        self._append_log(f"Embedding structured block preview for: {pdf_path.name}")
+        self._append_log(self._text("embedding_preview", file_name=pdf_path.name))
         self.progress_bar.setValue(0)
         self._start_index_worker("embed_preview", pdf_paths=[pdf_path])
 
     def _store_selected_pdf_preview(self) -> None:
         pdf_path = self._first_selected_pdf_path()
         if not pdf_path:
-            self._append_log("Select one ready PDF file before storing blocks.")
+            self._append_log(self._text("no_store_selection"))
             return
 
-        self._append_log(f"Storing structured block preview in local Qdrant for: {pdf_path.name}")
+        self._append_log(self._text("storing_preview", file_name=pdf_path.name))
         self.progress_bar.setValue(0)
         self._start_index_worker("store_preview", pdf_paths=[pdf_path])
 
@@ -551,7 +796,8 @@ class MainWindow(QMainWindow):
                 path_item = make_table_item(str(state.file_path))
                 size_item = make_table_item(format_file_size(state.file_size_bytes))
                 pages_item = make_table_item(str(state.page_count) if state.page_count is not None else "-")
-                status_item = make_table_item(state.status)
+                status_item = make_table_item(self._status_label(state.status))
+                status_item.setData(Qt.ItemDataRole.UserRole, state.status)
 
                 if state.error_message:
                     status_item.setToolTip(state.error_message)
@@ -567,8 +813,32 @@ class MainWindow(QMainWindow):
             self.pdf_table.blockSignals(False)
         self._update_action_buttons_enabled()
 
+    def _refresh_table_language(self) -> None:
+        if not hasattr(self, "pdf_table"):
+            return
+        for row in range(self.pdf_table.rowCount()):
+            status_item = self.pdf_table.item(row, 5)
+            if status_item is None:
+                continue
+            status = status_item.data(Qt.ItemDataRole.UserRole) or status_item.text()
+            status_item.setText(self._status_label(str(status)))
+
+    def _status_label(self, status: str) -> str:
+        translation_key = STATUS_TRANSLATION_KEYS.get(status)
+        if translation_key is None:
+            return status
+        return self._text(translation_key)
+
+    def _row_status(self, row: int) -> str | None:
+        status_item = self.pdf_table.item(row, 5)
+        if status_item is None:
+            return None
+        status = status_item.data(Qt.ItemDataRole.UserRole)
+        return str(status) if status is not None else status_item.text()
+
     def _set_scan_controls_enabled(self, enabled: bool) -> None:
         self.select_folder_button.setEnabled(enabled)
+        self.language_button.setEnabled(enabled)
         self.scan_button.setEnabled(enabled)
         self.preview_button.setEnabled(enabled)
         self.embed_preview_button.setEnabled(enabled)
@@ -589,18 +859,18 @@ class MainWindow(QMainWindow):
     def _ready_pdf_paths_from_rows(self, rows: list[int]) -> list[Path]:
         paths: list[Path] = []
         for row in rows:
-            status_item = self.pdf_table.item(row, 5)
             path_item = self.pdf_table.item(row, 2)
-            if status_item and path_item and status_item.text() in {READY, INDEXED, INDEXED_STALE}:
+            status = self._row_status(row)
+            if status in {READY, INDEXED, INDEXED_STALE} and path_item:
                 paths.append(Path(path_item.text()))
         return paths
 
     def _checked_pdf_paths_with_statuses(self, statuses: set[str]) -> list[Path]:
         paths: list[Path] = []
         for row in self._checked_pdf_rows():
-            status_item = self.pdf_table.item(row, 5)
             path_item = self.pdf_table.item(row, 2)
-            if status_item and path_item and status_item.text() in statuses:
+            status = self._row_status(row)
+            if status in statuses and path_item:
                 paths.append(Path(path_item.text()))
         return paths
 
@@ -609,9 +879,9 @@ class MainWindow(QMainWindow):
         selected_rows = [index.row() for index in self.pdf_table.selectionModel().selectedRows()]
 
         for row in checked_rows or selected_rows:
-            status_item = self.pdf_table.item(row, 5)
             path_item = self.pdf_table.item(row, 2)
-            if status_item and path_item and status_item.text() in {READY, INDEXED, INDEXED_STALE}:
+            status = self._row_status(row)
+            if status in {READY, INDEXED, INDEXED_STALE} and path_item:
                 return Path(path_item.text())
 
         return None
@@ -699,14 +969,14 @@ class MainWindow(QMainWindow):
 
     def _handle_indexing_progress(self, progress: IndexingProgress) -> None:
         stage_messages = {
-            "parse": "Parsing",
-            "scan": "Scanning PDFs",
-            "build_blocks": "Building structured blocks",
-            "embed": "Embedding structured blocks",
-            "store": "Storing vectors in local Qdrant",
-            "clear": "Clearing index data",
-            "done": "Finished",
-            "failed": "Failed",
+            "parse": self._text("stage_parse"),
+            "scan": self._text("stage_scan"),
+            "build_blocks": self._text("stage_build_blocks"),
+            "embed": self._text("stage_embed"),
+            "store": self._text("stage_store"),
+            "clear": self._text("stage_clear"),
+            "done": self._text("stage_done"),
+            "failed": self._text("stage_failed"),
         }
         stage_label = stage_messages.get(progress.stage, progress.stage)
         self._append_log(
@@ -761,48 +1031,32 @@ class MainWindow(QMainWindow):
     def _clear_selected(self) -> None:
         document_ids = self._checked_document_ids()
         if not document_ids:
-            self._append_log("No checked PDF files selected for clearing.")
+            self._append_log(self._text("no_clear_selection"))
             return
 
-        answer = QMessageBox.question(
-            self,
-            "Clear selected indexed documents",
-            (
-                f"Remove checked indexed data for {len(document_ids)} selected document(s)?\n\n"
-                "Files that are not indexed will be skipped and reported.\n"
-                "Source PDFs will not be deleted."
-            ),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            self._append_log("Clear selected cancelled.")
+        if not self._confirm(
+            self._text("clear_selected_title"),
+            self._text("clear_selected_message", count=len(document_ids)),
+        ):
+            self._append_log(self._text("clear_selected_cancelled"))
             return
 
         self.progress_bar.setValue(0)
-        self._append_log(f"Clearing selected document(s): {len(document_ids)}.")
+        self._append_log(self._text("clearing_selected", count=len(document_ids)))
         self._start_index_worker("clear_selected", document_ids=document_ids)
 
     def _clear_all(self) -> None:
         shared_root = self.document_registry.shared_data_root
-        answer = QMessageBox.warning(
-            self,
-            "Clear all shared index data",
-            (
-                "This will wipe the whole shared local index for Indexator and chat retrieval.\n\n"
-                f"Shared index root: {shared_root}\n"
-                f"Qdrant collection: {self.qdrant_store.collection_name}\n\n"
-                "Only index-owned data will be removed. Source PDFs will not be deleted."
-            ),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            self._append_log("Clear all cancelled.")
+        if not self._confirm(
+            self._text("clear_all_title"),
+            self._text("clear_all_message", shared_root=shared_root, collection=self.qdrant_store.collection_name),
+            QMessageBox.Icon.Warning,
+        ):
+            self._append_log(self._text("clear_all_cancelled"))
             return
 
         self.progress_bar.setValue(0)
-        self._append_log(f"Clearing all shared index data under: {shared_root}")
+        self._append_log(self._text("clearing_all", shared_root=shared_root))
         self._start_index_worker("clear_all")
 
     def _checked_document_ids(self) -> list[str]:
@@ -830,10 +1084,9 @@ class MainWindow(QMainWindow):
         has_checked_clearable = False
         has_checked_reindexable = False
         for row in self._checked_pdf_rows():
-            status_item = self.pdf_table.item(row, 5)
-            if not status_item:
+            status = self._row_status(row)
+            if status is None:
                 continue
-            status = status_item.text()
             if status in {INDEXED, INDEXED_STALE, MISSING_SOURCE, INDEX_ERROR}:
                 has_checked_clearable = True
             if status in {READY, INDEXED, INDEXED_STALE}:
