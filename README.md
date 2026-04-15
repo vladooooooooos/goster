@@ -1,23 +1,23 @@
-# Goster Workspace
+# Рабочая папка Goster
 
-Goster is a local workspace for indexing Russian GOST PDF documents and asking document-grounded questions over the indexed content. The workspace currently contains multiple adjacent Python components rather than one single application.
+Goster — локальная рабочая папка для индексирования русскоязычных PDF-документов ГОСТ и вопросов по проиндексированному содержимому. Сейчас это не одно приложение, а несколько соседних Python-компонентов.
 
-The repository is intended to store source code, documentation, setup files, and lightweight examples. Local virtual environments, document corpora, generated indexes, vector stores, model caches, and machine-specific settings should stay outside Git.
+В Git стоит хранить исходный код, документацию, setup-файлы и лёгкие примеры. Локальные виртуальные окружения, корпуса документов, сгенерированные индексы, векторные хранилища, кэши моделей и настройки конкретной машины должны оставаться вне Git.
 
-## Repository Map
+## Карта репозитория
 
 ```text
 .
-|-- gost-chat/                 # FastAPI RAG chat web app and a JSON PDF indexer
-|-- indexator/                 # Windows-first PySide6 desktop indexing app
-|   |-- indexator/             # Indexator Python application package root
-|   `-- run.bat                # Windows launcher for the desktop app
-|-- shared/                    # Shared vector-store utilities used across components
+|-- gost-chat/                 # FastAPI RAG chat и JSON PDF indexer
+|-- indexator/                 # Windows-first PySide6 desktop app для индексирования
+|   |-- indexator/             # Корень Python-приложения Indexator
+|   `-- run.bat                # Windows launcher для desktop app
+|-- shared/                    # Общие vector-store utilities для компонентов
 |-- scripts/                   # Cross-component smoke checks
-`-- docs/                      # Local PDF corpus location, not committed by default
+`-- docs/                      # Локальный PDF corpus, по умолчанию не коммитится
 ```
 
-Local-only folders that may appear during development:
+Локальные папки, которые могут появляться при разработке:
 
 ```text
 gost-chat/.venv/
@@ -31,21 +31,21 @@ shared/data/
 goster_vector_store_smoke_*/
 ```
 
-## Components
+## Компоненты
 
 ### Indexator
 
-Purpose: desktop application for scanning PDF folders, parsing GOST documents, producing structured blocks, generating embeddings, and writing local Qdrant vector data.
+Назначение: desktop-приложение для сканирования папок с PDF, разбора ГОСТ-документов, построения structured blocks, генерации embeddings и записи локальных Qdrant vector data.
 
-Stack:
+Стек:
 
 - Python
 - PySide6
 - PyMuPDF
 - sentence-transformers / transformers / torch
-- qdrant-client with local persistent storage
+- qdrant-client с локальным persistent storage
 
-Entry points and important files:
+Точки входа и важные файлы:
 
 - `indexator/indexator/app/main.py`
 - `indexator/run.bat`
@@ -53,28 +53,28 @@ Entry points and important files:
 - `indexator/indexator/requirements.txt`
 - `indexator/indexator/tests/`
 
-Local-only artifacts:
+Локальные артефакты:
 
 - `indexator/indexator/.venv/`
 - `indexator/indexator/data/`
 - `indexator/indexator/output/`
-- `indexator/indexator/testdocs/`, unless a small, licensed fixture set is intentionally added
+- `indexator/indexator/testdocs/`, если только это не маленький намеренно добавленный набор лицензированных fixtures
 - `indexator/.test_tmp/`
 
 ### GOST Chat
 
-Purpose: FastAPI web app for document-grounded chat over indexed content. It can use local retrieval data and an OpenAI-compatible LLM provider.
+Назначение: FastAPI web app для document-grounded chat по проиндексированному содержимому. Может использовать локальные retrieval data и OpenAI-compatible LLM provider.
 
-Stack:
+Стек:
 
 - Python
 - FastAPI / Uvicorn
 - Jinja2, HTML, CSS, browser JavaScript
-- PyMuPDF for the local JSON indexer
-- qdrant-client, sentence-transformers, torch for vector retrieval and reranking paths
-- pydantic-settings for configuration
+- PyMuPDF для локального JSON indexer
+- qdrant-client, sentence-transformers, torch для vector retrieval и reranking
+- pydantic-settings для конфигурации
 
-Entry points and important files:
+Точки входа и важные файлы:
 
 - `gost-chat/app/main.py`
 - `gost-chat/apps/indexer/main.py`
@@ -83,7 +83,7 @@ Entry points and important files:
 - `gost-chat/requirements.txt`
 - `gost-chat/.env.example`
 
-Local-only artifacts:
+Локальные артефакты:
 
 - `gost-chat/.venv/`
 - `gost-chat/.env`
@@ -92,99 +92,99 @@ Local-only artifacts:
 
 ### Shared
 
-Purpose: shared Python utilities for Qdrant vector storage configuration, payloads, and models.
+Назначение: общие Python utilities для конфигурации Qdrant vector storage, payloads и models.
 
-Stack:
+Стек:
 
 - Python
-- qdrant-client integration code
+- integration code для qdrant-client
 
-Entry points and important files:
+Точки входа и важные файлы:
 
 - `shared/vector_store/config.py`
 - `shared/vector_store/qdrant_store.py`
 - `shared/vector_store/models.py`
 - `shared/vector_store/payloads.py`
 
-Local-only artifacts:
+Локальные артефакты:
 
 - `shared/data/`
 
 ### Scripts
 
-Purpose: smoke checks that validate retrieval, context building, and shared vector-store behavior across components.
+Назначение: smoke checks, которые проверяют retrieval, context building и поведение shared vector store между компонентами.
 
-Stack:
+Стек:
 
 - Python
-- component dependencies from `gost-chat` and `indexator`
+- зависимости компонентов `gost-chat` и `indexator`
 
-Entry points:
+Точки входа:
 
 - `scripts/vector_store_smoke.py`
 - `scripts/retrieval_pipeline_smoke.py`
 - `scripts/context_builder_smoke.py`
 - `gost-chat/scripts/polza_llm_smoke.py`
 
-## File Classification
+## Классификация файлов
 
-Keep in Git:
+Хранить в Git:
 
-- Handwritten Python source under `gost-chat/app/`, `gost-chat/apps/`, `indexator/indexator/app/`, `shared/`, and `scripts/`
-- Tests under `indexator/indexator/tests/`
+- Рукописный Python source в `gost-chat/app/`, `gost-chat/apps/`, `indexator/indexator/app/`, `shared/` и `scripts/`
+- Tests в `indexator/indexator/tests/`
 - Requirements files
-- README and project documentation
+- README и project documentation
 - `.env.example`
-- `indexator/indexator/config.json`, because it is a reproducible default config without secrets
-- Lightweight launch scripts such as `indexator/run.bat`
+- `indexator/indexator/config.json`, потому что это воспроизводимый default config без секретов
+- Lightweight launch scripts, например `indexator/run.bat`
 
-Ignore from Git:
+Игнорировать в Git:
 
-- `.venv/`, `venv/`, Python caches, test caches
-- `.env` and other local environment files
-- Qdrant local storage, SQLite databases, lock files
-- Generated JSON/JSONL indexing output
-- Local smoke-test folders
-- Local model caches and downloaded dependency caches
-- Raw PDF corpora under `docs/`, `gost-chat/docs/`, and `indexator/indexator/testdocs/`
+- `.venv/`, `venv/`, Python caches и test caches
+- `.env` и другие local environment files
+- Локальное Qdrant storage, SQLite databases и lock files
+- Сгенерированный JSON/JSONL indexing output
+- Локальные smoke-test folders
+- Локальные model caches и downloaded dependency caches
+- Raw PDF corpora в `docs/`, `gost-chat/docs/` и `indexator/indexator/testdocs/`
 
-Optional / maybe keep:
+Опционально / возможно хранить:
 
-- A tiny, licensed sample PDF fixture, preferably under a dedicated `samples/` or `fixtures/` folder
-- Small expected-output fixtures for tests if they are stable and intentionally reviewed
-- Developer notes such as `FRIEND_README.md`, `RULES.md`, and `agents.md` if they are useful to future maintainers
+- Маленький лицензированный sample PDF fixture, желательно в отдельной папке `samples/` или `fixtures/`
+- Маленькие expected-output fixtures для tests, если они стабильны и намеренно проверены
+- Developer notes вроде `FRIEND_README.md`, `RULES.md` и `agents.md`, если они полезны будущим maintainers
 
-Replace with example/template:
+Заменять example/template-файлами:
 
-- `gost-chat/.env` should stay local; commit `gost-chat/.env.example`
-- Any future secret-bearing provider config should be committed only as `*.example`
+- `gost-chat/.env` должен оставаться локальным; в Git хранить `gost-chat/.env.example`
+- Любой будущий config с секретами коммитить только как `*.example`
 
-Externalize from repo and document:
+Вынести из репозитория и явно документировать:
 
-- Full GOST PDF corpus
+- Полный GOST PDF corpus
 - Qdrant/vector store data
-- Generated chunk indexes and metadata
-- Downloaded ML models and caches
-- Large debug exports
+- Сгенерированные chunk indexes и metadata
+- Скачанные ML models и caches
+- Большие debug exports
 
-## Fresh Machine Recovery
+## Восстановление на чистой машине
 
-### 1. Clone and inspect
+### 1. Клонировать и осмотреть
 
 ```powershell
 git clone <repo-url> goster
 cd goster
 ```
 
-Restore external artifacts outside Git if you need the same local state:
+Если нужно восстановить тот же локальный state, верните external artifacts вне Git:
 
-- PDF corpus into `docs/` or a chosen external folder
-- Any saved Qdrant store into `shared/data/qdrant/`
-- Any saved JSON index into `gost-chat/data/`
+- PDF corpus в `docs/` или выбранную внешнюю папку
+- Сохранённое Qdrant store в `shared/data/qdrant/`
+- Сохранённый JSON index в `gost-chat/data/`
 
-Generated artifacts can also be rebuilt from PDFs.
+Generated artifacts можно также пересобрать из PDF.
 
-### 2. Set up Indexator
+### 2. Настроить Indexator
 
 ```powershell
 cd indexator\indexator
@@ -194,15 +194,15 @@ python -m pip install -r requirements.txt
 python -m app.main
 ```
 
-Indexator reads `config.json`. By default it writes shared Qdrant data to `shared/data/qdrant` relative to the app directory.
+Indexator читает `config.json`. По умолчанию он пишет shared Qdrant data в `shared/data/qdrant` относительно директории приложения.
 
-On Windows, the launcher can also be used:
+На Windows можно также использовать launcher:
 
 ```powershell
 ..\run.bat
 ```
 
-### 3. Set up GOST Chat
+### 3. Настроить GOST Chat
 
 ```powershell
 cd ..\..\gost-chat
@@ -212,33 +212,33 @@ python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Edit `.env` for local settings. Keep real API keys in the shell or a secret manager:
+Отредактируйте `.env` под локальные настройки. Реальные API keys храните в shell или secret manager:
 
 ```powershell
 $env:POLZA_API_KEY="your-api-key"
 ```
 
-Build a JSON index from local PDFs when using the JSON retrieval path:
+Соберите JSON index из локальных PDF, если используете JSON retrieval path:
 
 ```powershell
 python apps/indexer/main.py --input-dir docs --output-dir data
 ```
 
-Run the web app:
+Запустите web app:
 
 ```powershell
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Open:
+Откройте:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-### 4. Run Smoke Checks
+### 4. Запустить smoke checks
 
-From the workspace root:
+Из корня рабочей папки:
 
 ```powershell
 python scripts/vector_store_smoke.py
@@ -246,15 +246,15 @@ python scripts/retrieval_pipeline_smoke.py
 python scripts/context_builder_smoke.py
 ```
 
-From `gost-chat`, with the API key configured:
+Из `gost-chat`, с настроенным API key:
 
 ```powershell
 python scripts/polza_llm_smoke.py
 ```
 
-## Safe Git Cleanup
+## Безопасная очистка Git
 
-If this folder is initialized as a Git repository and generated/local files were already tracked, untrack them without deleting local copies:
+Если эта папка инициализирована как Git repository и generated/local files уже попали в tracked files, уберите их из индекса без удаления локальных копий:
 
 ```powershell
 git rm --cached -r gost-chat/.venv indexator/indexator/.venv
@@ -264,13 +264,13 @@ git rm --cached -r goster_vector_store_smoke_kog7mk5k goster_vector_store_smoke_
 git rm --cached gost-chat/.env
 ```
 
-Use only the commands for paths that are actually tracked. Check first:
+Выполняйте только команды для путей, которые действительно tracked. Сначала проверьте:
 
 ```powershell
 git ls-files gost-chat/.venv indexator/indexator/.venv gost-chat/data indexator/indexator/data indexator/indexator/output shared/data docs gost-chat/docs indexator/indexator/testdocs gost-chat/.env
 ```
 
-## Commit and Push
+## Коммит и push
 
 ```powershell
 git status --short
@@ -283,21 +283,21 @@ git remote add origin <repo-url>
 git push -u origin main
 ```
 
-If the remote already exists, skip `git remote add origin` or update it with:
+Если remote уже существует, пропустите `git remote add origin` или обновите его:
 
 ```powershell
 git remote set-url origin <repo-url>
 ```
 
-## Disaster Recovery Checklist
+## Контрольный список восстановления
 
-- Clone the repository.
-- Recreate Python virtual environments from each component's `requirements.txt`.
-- Copy `.env.example` to `.env` where needed and configure local settings.
-- Restore API keys through environment variables or a secret manager.
-- Restore PDFs from external storage, or obtain a minimal licensed sample set.
-- Rebuild `gost-chat/data/` with `gost-chat/apps/indexer/main.py` if using JSON retrieval.
-- Rebuild or restore `shared/data/qdrant/` if using vector retrieval.
-- Launch Indexator and confirm it can scan a PDF folder.
-- Launch GOST Chat and check `GET /health`.
-- Run smoke checks from `scripts/`.
+- Клонировать репозиторий.
+- Пересоздать Python virtual environments из `requirements.txt` каждого компонента.
+- Скопировать `.env.example` в `.env` там, где это нужно, и настроить local settings.
+- Восстановить API keys через environment variables или secret manager.
+- Восстановить PDFs из external storage или взять минимальный лицензированный sample set.
+- Пересобрать `gost-chat/data/` через `gost-chat/apps/indexer/main.py`, если используется JSON retrieval.
+- Пересобрать или восстановить `shared/data/qdrant/`, если используется vector retrieval.
+- Запустить Indexator и проверить, что он сканирует папку с PDF.
+- Запустить GOST Chat и проверить `GET /health`.
+- Запустить smoke checks из `scripts/`.
