@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import json
 from collections import Counter
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
+    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -59,7 +61,7 @@ TRANSLATIONS = {
         "clear_all": "Clear all",
         "logs_label": "Logs:",
         "logs_placeholder": "Logs will appear here",
-        "table_selected": "Selected",
+        "table_selected": "",
         "table_file_name": "File name",
         "table_path": "Path",
         "table_size": "Size",
@@ -76,6 +78,7 @@ TRANSLATIONS = {
         "embedding_device": "Embedding device: {device}",
         "select_folder_title": "Select PDF folder",
         "selected_folder": "Selected folder: {folder}",
+        "ui_state_save_failed": "Could not save UI state: {error}",
         "select_folder_before_scan": "Select a folder before scanning.",
         "background_running": "Background operation is already running.",
         "scanning_folder": "Scanning PDF files in: {folder}",
@@ -147,7 +150,7 @@ TRANSLATIONS = {
         "clear_all": "Очистить всё",
         "logs_label": "Логи:",
         "logs_placeholder": "Здесь будут появляться логи",
-        "table_selected": "Выбор",
+        "table_selected": "",
         "table_file_name": "Файл",
         "table_path": "Путь",
         "table_size": "Размер",
@@ -164,6 +167,7 @@ TRANSLATIONS = {
         "embedding_device": "Устройство эмбеддингов: {device}",
         "select_folder_title": "Выберите папку с PDF",
         "selected_folder": "Выбрана папка: {folder}",
+        "ui_state_save_failed": "Не удалось сохранить UI state: {error}",
         "select_folder_before_scan": "Сначала выберите папку для сканирования.",
         "background_running": "Фоновая операция уже выполняется.",
         "scanning_folder": "Сканирование PDF-файлов в папке: {folder}",
@@ -263,6 +267,7 @@ class MainWindow(QMainWindow):
             self.fingerprint_service,
         )
         self.output_dir = self.app_root / "output"
+        self.ui_state_path = self.output_dir / "ui_state.json"
         self.current_scan_folder: Path | None = None
         self.active_index_thread: QThread | None = None
         self.active_index_worker: IndexWorker | None = None
@@ -292,6 +297,8 @@ class MainWindow(QMainWindow):
         self.progress_bar = QProgressBar()
         self.folder_label = QLabel()
         self.logs_label = QLabel()
+        self.content_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.log_container = QWidget()
 
         self._configure_widgets()
         self._build_layout()
@@ -301,6 +308,7 @@ class MainWindow(QMainWindow):
         self._append_log(self._text("app_started"))
         self._append_log(self._text("runtime", runtime=sys.executable))
         self._append_log(self._text("embedding_device", device=self.embedding_service.embedder.describe_device_runtime()))
+        self._restore_startup_folder()
 
     def _configure_widgets(self) -> None:
         self.select_folder_button.setObjectName("selectFolderButton")
@@ -356,8 +364,10 @@ class MainWindow(QMainWindow):
         header.setMinimumSectionSize(42)
         for column in range(self.pdf_table.columnCount()):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
 
-        self.pdf_table.setColumnWidth(0, 64)
+        self.pdf_table.setColumnWidth(0, 38)
         self.pdf_table.setColumnWidth(1, 170)
         self.pdf_table.setColumnWidth(2, 560)
         self.pdf_table.setColumnWidth(3, 90)
@@ -397,9 +407,18 @@ class MainWindow(QMainWindow):
 
         main_layout.addLayout(folder_layout)
         main_layout.addLayout(action_layout)
-        main_layout.addWidget(self.pdf_table, stretch=3)
-        main_layout.addWidget(self.logs_label)
-        main_layout.addWidget(self.log_panel, stretch=1)
+        log_layout = QVBoxLayout(self.log_container)
+        log_layout.setContentsMargins(0, 0, 0, 0)
+        log_layout.addWidget(self.logs_label)
+        log_layout.addWidget(self.log_panel)
+
+        self.content_splitter.addWidget(self.pdf_table)
+        self.content_splitter.addWidget(self.log_container)
+        self.content_splitter.setStretchFactor(0, 3)
+        self.content_splitter.setStretchFactor(1, 1)
+        self.content_splitter.setSizes([420, 150])
+
+        main_layout.addWidget(self.content_splitter, stretch=1)
         main_layout.addWidget(self.progress_bar)
 
         self.setCentralWidget(root)
@@ -437,9 +456,48 @@ class MainWindow(QMainWindow):
             return
 
         self.folder_path_field.setText(folder)
+        self._save_startup_folder(Path(folder))
         self._append_log(self._text("selected_folder", folder=folder))
         self._update_select_folder_attention()
         self._scan_pdfs()
+
+    def _restore_startup_folder(self) -> None:
+        folder = self._load_startup_folder()
+        if folder is None:
+            self._update_select_folder_attention()
+            return
+
+        self.folder_path_field.setText(str(folder))
+        self.current_scan_folder = folder
+        self._update_select_folder_attention()
+        self._append_log(self._text("selected_folder", folder=folder))
+        self._scan_pdfs()
+
+    def _load_startup_folder(self) -> Path | None:
+        try:
+            raw_state = json.loads(self.ui_state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+
+        folder_value = raw_state.get("startup_folder") if isinstance(raw_state, dict) else None
+        if not isinstance(folder_value, str) or not folder_value.strip():
+            return None
+
+        folder = Path(folder_value)
+        if folder.exists() and folder.is_dir():
+            return folder
+
+        return None
+
+    def _save_startup_folder(self, folder: Path) -> None:
+        try:
+            self.ui_state_path.parent.mkdir(parents=True, exist_ok=True)
+            self.ui_state_path.write_text(
+                json.dumps({"startup_folder": str(folder)}, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as error:
+            self._append_log(self._text("ui_state_save_failed", error=error))
 
     def _text(self, key: str, **values: object) -> str:
         template = TRANSLATIONS[self.current_language].get(key, TRANSLATIONS["en"].get(key, key))
