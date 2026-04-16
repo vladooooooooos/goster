@@ -1,5 +1,93 @@
 # GOSTer Chat
 
+## Лаунчеры для Windows
+
+GOSTer Chat остаётся обычным локальным web-приложением. Лаунчеры просто запускают существующий FastAPI backend и открывают чат в браузере Windows по умолчанию. Они не превращают приложение в desktop shell и не упаковывают его в `.exe`.
+
+### Ручной запуск в браузере
+
+Существующий ручной сценарий через браузер не изменился:
+
+```powershell
+cd gost-chat
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Затем откройте:
+
+```text
+http://127.0.0.1:8000
+```
+
+### Отладочный режим
+
+Этот режим нужен для разработки. Он запускает backend, оставляет видимую консоль с логами и ошибками, ждёт доступности `GET /health` и открывает чат в браузере Windows по умолчанию:
+
+```powershell
+cd gost-chat
+python run_chat_debug.py
+```
+
+Для переносимого запуска двойным кликом используйте:
+
+```text
+run_chat_debug.cmd
+```
+
+### Пользовательский режим
+
+Этот режим нужен для обычного пользовательского запуска. Если запускаете из консоли:
+
+```powershell
+cd gost-chat
+python run_chat_user.py
+```
+
+Для запуска на Windows без постоянно открытой консоли используйте VBS-обёртку:
+
+```powershell
+cd gost-chat
+wscript.exe run_chat_user.vbs
+```
+
+Для переносимого запуска двойным кликом используйте:
+
+```text
+run_chat_user.cmd
+```
+
+Для диагностики пользовательский режим пишет минимальные логи в `goster_chat_user.log`.
+
+### Остановка backend
+
+Чтобы остановить backend на `127.0.0.1:8000`, включая debug backend, выполните:
+
+```powershell
+cd gost-chat
+powershell -ExecutionPolicy Bypass -File .\stop_chat_backend.ps1
+```
+
+Для переносимой остановки двойным кликом используйте:
+
+```text
+stop_chat_backend.cmd
+```
+
+Если backend уже запущен на `http://127.0.0.1:8000`, лаунчеры не запускают второй процесс. Они просто открывают чат в браузере по умолчанию.
+
+Не удаляйте эти файлы, иначе запуск двойным кликом перестанет работать:
+
+- `launcher_core.py`
+- `run_chat_debug.py`
+- `run_chat_debug.cmd`
+- `run_chat_user.py`
+- `run_chat_user.vbs`
+- `run_chat_user.cmd`
+- `stop_chat_backend.ps1`
+- `stop_chat_backend.cmd`
+
+Лаунчерам также нужны Python-окружение и файлы приложения в `app/`.
+
 GOSTer Chat — document-grounded RAG chat для проиндексированных PDF-документов. Web app даёт один основной chat flow: пользователь задаёт вопрос, backend локально извлекает релевантные chunks или vector blocks, LLM provider генерирует grounded answer, а UI показывает citations, построенные backend-ом.
 
 Indexing остаётся отдельным шагом. Retrieval, reranking, citation building и сборка document context выполняются локально. Во внешний LLM provider отправляются только финальные LLM messages.
@@ -119,38 +207,6 @@ Copy-Item .env.example .env
 
 Когда CUDA доступна, `GOST_CHAT_EMBEDDING_DEVICE=auto` и `GOST_CHAT_RERANKER_DEVICE=auto` resolve to `cuda`. Если check печатает `False`, установлен CPU-only Torch или NVIDIA driver не виден Python.
 
-## Desktop window launcher
-
-The desktop launcher is an optional PyWebView shell around the same local FastAPI web app. It starts the existing backend command, waits for `http://127.0.0.1:8000/health`, and opens the same UI in a native desktop window. The browser workflow remains unchanged.
-
-Install the optional dependency:
-
-```powershell
-python -m pip install pywebview
-```
-
-Launch in browser mode:
-
-```powershell
-cd gost-chat
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-Then open:
-
-```text
-http://127.0.0.1:8000
-```
-
-Launch in desktop-window mode:
-
-```powershell
-cd gost-chat
-python run_desktop.py
-```
-
-The desktop window displays the same local URL, so future backend and frontend changes are picked up automatically without a separate desktop UI codepath.
-
 ## Основные настройки `.env`
 
 ```text
@@ -179,7 +235,7 @@ GOST_CHAT_RERANKER_ENABLED=true
 1. Запустить Indexator из корня:
 
 ```powershell
-.\indexator\run.bat
+.\indexator\launch_indexator.cmd
 ```
 
 2. Выбрать папку с PDFs и выполнить indexing.

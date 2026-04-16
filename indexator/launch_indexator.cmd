@@ -1,9 +1,9 @@
 @echo off
 setlocal
 
-set "APP_DIR=C:\goster\indexator"
-set "LOCAL_PYTHON=C:\goster\indexator\.venv\Scripts\pythonw.exe"
-set "FALLBACK_PYTHON=C:\goster\.venv\Scripts\pythonw.exe"
+set "APP_DIR=%~dp0"
+set "LOCAL_PYTHON=%APP_DIR%.venv\Scripts\pythonw.exe"
+set "WORKSPACE_PYTHON=%APP_DIR%..\.venv\Scripts\pythonw.exe"
 
 cd /d "%APP_DIR%"
 
@@ -12,17 +12,24 @@ if exist "%LOCAL_PYTHON%" (
     exit /b 0
 )
 
-if exist "%FALLBACK_PYTHON%" (
-    start "" "%FALLBACK_PYTHON%" -m app.main
+if exist "%WORKSPACE_PYTHON%" (
+    start "" "%WORKSPACE_PYTHON%" -m app.main
+    exit /b 0
+)
+
+where pythonw.exe >nul 2>nul
+if %errorlevel% equ 0 (
+    start "" pythonw.exe -m app.main
     exit /b 0
 )
 
 echo Indexator launcher error:
-echo Neither Python interpreter was found.
+echo No Python interpreter was found.
 echo.
 echo Checked:
 echo   %LOCAL_PYTHON%
-echo   %FALLBACK_PYTHON%
+echo   %WORKSPACE_PYTHON%
+echo   pythonw.exe on PATH
 echo.
 pause
 exit /b 1

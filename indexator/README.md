@@ -59,6 +59,7 @@ indexator/
   config.json
   requirements.txt
   README.md
+  launch_indexator.cmd
   run.bat
 ```
 
@@ -83,10 +84,10 @@ python -m pip install --upgrade --force-reinstall torch --index-url https://down
 python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU only')"
 ```
 
-Запустить Indexator через launcher:
+Запустить Indexator через переносимый лаунчер:
 
 ```powershell
-.\indexator\run.bat
+.\indexator\launch_indexator.cmd
 ```
 
 Или вручную:
