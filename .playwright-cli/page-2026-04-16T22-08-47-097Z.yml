@@ -1,0 +1,18 @@
+- main [ref=e2]:
+  - complementary "История чатов" [ref=e3]:
+    - generic [ref=e4]:
+      - heading "История" [level=2] [ref=e5]
+      - button "Новый чат" [ref=e6] [cursor=pointer]
+    - generic "Список чатов" [ref=e7]:
+      - generic [ref=e8]:
+        - button "Новый чат 17.04, 01:08" [ref=e9] [cursor=pointer]:
+          - generic [ref=e10]: Новый чат
+          - generic [ref=e11]: 17.04, 01:08
+        - button "Удалить чат" [ref=e12] [cursor=pointer]
+  - region "Документный чат" [ref=e13]:
+    - heading "ГОСТер" [level=1] [ref=e15]
+    - generic [ref=e17]:
+      - generic [ref=e18]: Сообщение
+      - textbox "Сообщение" [ref=e19]:
+        - /placeholder: Спросите по проиндексированным документам...
+      - button "Отправить" [ref=e20] [cursor=pointer]
