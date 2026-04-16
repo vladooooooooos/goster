@@ -45,6 +45,7 @@ node_modules/
 .pnpm-store/
 .yarn/
 coverage/
+.playwright-cli/
 
 # Local document corpora and generated indexes
 docs/*.pdf
