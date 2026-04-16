@@ -259,7 +259,9 @@ cd gost-chat
 Copy-Item .env.example .env
 ```
 
-Отредактируйте `.env` под локальные настройки. Реальные API keys храните в shell или secret manager:
+Отредактируйте `.env` под локальные настройки. В `.env.example` уже указано `GOST_CHAT_LLM_API_KEY_ENV_VAR=POLZA_API_KEY`, поэтому GOST Chat будет искать ключ Polza.ai именно в переменной среды `POLZA_API_KEY`.
+
+Для текущего окна PowerShell можно задать её так:
 
 ```powershell
 $env:POLZA_API_KEY="your-api-key"
