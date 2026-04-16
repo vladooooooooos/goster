@@ -93,6 +93,12 @@ h1 {
   margin: 0;
 }
 
+.response-duration {
+  margin: 6px 0 0;
+  color: #86a3c2;
+  font-size: 0.72rem;
+}
+
 .citation-summary {
   margin: 12px 0 0;
   color: #b7c9df;

@@ -31,7 +31,7 @@ function appendMessage(role, body) {
   return article;
 }
 
-function replaceAssistantMessage(article, data) {
+function replaceAssistantMessage(article, data, elapsedSeconds) {
   const bodyNode = article.querySelector(".message-body");
   bodyNode.replaceChildren();
 
@@ -39,6 +39,13 @@ function replaceAssistantMessage(article, data) {
   answer.className = "answer-text";
   answer.textContent = data.answer;
   bodyNode.append(answer);
+
+  if (typeof elapsedSeconds === "number") {
+    const duration = document.createElement("p");
+    duration.className = "response-duration";
+    duration.textContent = formatElapsedSeconds(elapsedSeconds);
+    bodyNode.append(duration);
+  }
 
   bodyNode.append(createCitationSummary(data));
 
@@ -120,11 +127,20 @@ function formatScore(score) {
   return score.toFixed(4);
 }
 
+function formatElapsedSeconds(seconds) {
+  if (seconds < 10) {
+    return `${seconds.toFixed(2)} s`;
+  }
+
+  return `${seconds.toFixed(1)} s`;
+}
+
 function scrollMessagesToBottom() {
   messages.scrollTop = messages.scrollHeight;
 }
 
 async function askIndexedDocuments(query) {
+  const startedAt = performance.now();
   const response = await fetch("/ask", {
     method: "POST",
     headers: {
@@ -139,7 +155,10 @@ async function askIndexedDocuments(query) {
     throw new Error(data.detail || "Не удалось ответить по проиндексированным документам.");
   }
 
-  return data;
+  return {
+    ...data,
+    elapsedSeconds: (performance.now() - startedAt) / 1000,
+  };
 }
 
 form.addEventListener("submit", async (event) => {
@@ -165,7 +184,7 @@ form.addEventListener("submit", async (event) => {
 
   try {
     const result = await askIndexedDocuments(message);
-    replaceAssistantMessage(loadingMessage, result);
+    replaceAssistantMessage(loadingMessage, result, result.elapsedSeconds);
   } catch (error) {
     loadingMessage.remove();
     setError(error.message);
