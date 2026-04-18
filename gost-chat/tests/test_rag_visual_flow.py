@@ -168,3 +168,29 @@ class RagVisualFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(answer.retrieval_info["visual"]["candidate_count"], 5)
         answer_prompt = service._llm_service.calls[-1][-1]["content"]
         self.assertIn("Visual evidence has been attached", answer_prompt)
+
+    async def test_russian_layout_query_returns_visual_attachments_without_photo_word(self):
+        service = RagService(
+            llm_service=FakeLlmService(
+                visual_decision=(
+                    '{"mode":"text_only","target_block_ids":[],"show_in_sources":false,'
+                    '"show_in_answer":false,"needs_multimodal_followup":false,'
+                    '"reason":"The text is enough."}'
+                )
+            ),
+            retrieval_pipeline=FakeRetrievalPipeline(visual_count=2),
+            context_builder=ContextBuilder(ContextBuilderSettings(min_blocks=1, soft_target_blocks=2, max_blocks=12)),
+            visual_crop_service=FakeCropService(),
+            visual_decision_enabled=True,
+            visual_max_crops_per_answer=4,
+        )
+
+        answer = await service.answer_question(
+            "\u043a\u0430\u043a \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u044e\u0442\u0441\u044f "
+            "\u0440\u0430\u043a\u043e\u0432\u0438\u043d\u044b \u0438 \u0441\u043c\u0435\u0441\u0438\u0442\u0435\u043b\u0438 "
+            "\u043d\u0430 \u0441\u0443\u0434\u043d\u0435",
+            top_k=12,
+        )
+
+        self.assertEqual(len(answer.visual_evidence), 2)
+        self.assertEqual(answer.retrieval_info["query_plan"]["tasks"][0]["needs_visual"], True)
