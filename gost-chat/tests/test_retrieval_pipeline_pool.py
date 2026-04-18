@@ -7,6 +7,7 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
+from app.config import Settings
 from app.services.retrieval_pipeline import RetrievalPipeline
 from app.services.retrieval_types import RetrievedBlock, make_reranked_block
 
@@ -80,3 +81,14 @@ class RetrievalPipelinePoolTest(unittest.TestCase):
 
         self.assertEqual(retriever.top_k, 45)
         self.assertEqual(reranker.top_n, 12)
+
+    def test_default_settings_use_broad_reranked_candidate_pool(self):
+        retriever = FakeRetriever()
+        reranker = FakeReranker()
+        pipeline = RetrievalPipeline(retriever=retriever, settings=Settings(), reranker=reranker)
+
+        result = pipeline.retrieve("query", top_k=12)
+
+        self.assertEqual(retriever.top_k, 30)
+        self.assertEqual(reranker.top_n, 12)
+        self.assertEqual(len(result.results), 12)

@@ -99,7 +99,8 @@ class RagVisualFlowTest(unittest.IsolatedAsyncioTestCase):
             visual_max_crops_per_answer=1,
         )
 
-        answer = await service.answer_question("query", top_k=12)
+        with self.assertLogs("app.services.rag_service", level="INFO") as logs:
+            answer = await service.answer_question("query", top_k=12)
 
         self.assertEqual(len(answer.visual_evidence), 1)
         self.assertEqual(answer.visual_evidence[0].block_id, "v1")
@@ -107,3 +108,4 @@ class RagVisualFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(answer.citations[0].has_visual_evidence)
         self.assertEqual(answer.citations[0].visual_evidence.crop_url, "/crops/doc-1/page-2-v1.png")
         self.assertEqual(answer.retrieval_info["visual"]["decision"]["mode"], "inspect_visual_and_show")
+        self.assertIn("Returned 1 visual attachment", "\n".join(logs.output))

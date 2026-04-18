@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict, dataclass
 from typing import Any
 
 from app.services.retrieval_types import RerankedBlock
 from app.services.visual_evidence import ContextVisualHints, VisualEvidenceRef, visual_ref_from_block
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -136,6 +139,16 @@ class ContextBuilder:
             seen_texts.add(text_key)
             total_chars_included = projected_chars
 
+        visual_added = self._add_best_visual_evidence_if_needed(
+            selected=selected,
+            ranked_blocks=ranked_blocks,
+            seen_block_ids=seen_block_ids,
+            seen_texts=seen_texts,
+            total_chars_included=total_chars_included,
+        )
+        if visual_added is not None:
+            selected.append(visual_added)
+
         formatted_context = "\n\n---\n\n".join(
             self._format_context_piece(
                 index=evidence.index,
@@ -158,13 +171,22 @@ class ContextBuilder:
             max_blocks=self.settings.max_blocks,
             stop_reason=stop_reason,
         )
-        return BuiltContext(
+        built_context = BuiltContext(
             query=query,
             selected=selected,
             formatted_context=formatted_context,
             stats=stats,
             visual_hints=visual_hints,
         )
+        logger.info(
+            "ContextBuilder input block types=%s; selected evidence block types=%s; "
+            "selected visual refs=%s; stop reason=%s.",
+            _block_types(ranked_blocks),
+            _block_types([evidence.block for evidence in selected]),
+            len(visual_hints.selected),
+            stop_reason,
+        )
+        return built_context
 
     def _format_context_piece(self, index: int, block: RerankedBlock, prompt_text: str) -> str:
         rerank_score = "none" if block.rerank_score is None else f"{block.rerank_score:.6f}"
@@ -181,6 +203,53 @@ class ContextBuilder:
                 prompt_text,
             ]
         )
+
+    def _add_best_visual_evidence_if_needed(
+        self,
+        selected: list[ContextEvidence],
+        ranked_blocks: list[RerankedBlock],
+        seen_block_ids: set[str],
+        seen_texts: set[str],
+        total_chars_included: int,
+    ) -> ContextEvidence | None:
+        if len(selected) >= max(1, self.settings.max_blocks):
+            return None
+        if any(visual_ref_from_block(evidence.block, evidence.evidence_preview) for evidence in selected):
+            return None
+
+        for block in ranked_blocks:
+            if block.block_id in seen_block_ids:
+                continue
+            normalized_text = normalize_text(block.evidence_text)
+            if not normalized_text:
+                continue
+            ref = visual_ref_from_block(block, truncate_text(normalized_text, self.settings.evidence_preview_chars))
+            if ref is None:
+                continue
+
+            prompt_text = truncate_text(normalized_text, self.settings.max_chars_per_block)
+            context_piece = self._format_context_piece(
+                index=len(selected) + 1,
+                block=block,
+                prompt_text=prompt_text,
+            )
+            separator_chars = 7 if selected else 0
+            projected_chars = total_chars_included + separator_chars + len(context_piece)
+            if selected and projected_chars > self.settings.max_context_chars:
+                return None
+
+            text_key = normalized_text.casefold()
+            if text_key in seen_texts:
+                continue
+            return ContextEvidence(
+                index=len(selected) + 1,
+                block=block,
+                prompt_text=prompt_text,
+                evidence_preview=truncate_text(normalized_text, self.settings.evidence_preview_chars),
+                source_label=block.source_file,
+                page_label=format_page_range(block.page_start, block.page_end),
+            )
+        return None
 
     def _build_visual_hints(
         self,
@@ -225,3 +294,7 @@ def format_page_range(page_start: int | None, page_end: int | None) -> str:
     if page_end is not None and page_end != page_start:
         return f"pages {page_start}-{page_end}"
     return f"page {page_start}"
+
+
+def _block_types(blocks: list[RerankedBlock]) -> list[str]:
+    return [block.block_type or "unknown" for block in blocks]

@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     reranker_batch_size: int = 2
     reranker_max_length: int = 512
     reranker_top_k: int = 30
-    reranker_top_n: int = 5
+    reranker_top_n: int = 12
     reranker_use_fp16_if_available: bool = True
     context_min_blocks: int = 2
     context_soft_target_blocks: int = 5

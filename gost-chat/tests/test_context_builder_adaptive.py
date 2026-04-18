@@ -16,6 +16,7 @@ def block(
     rerank_score: float | None,
     retrieval_score: float = 0.5,
     payload: dict | None = None,
+    block_type: str = "paragraph",
 ) -> RerankedBlock:
     return RerankedBlock(
         block_id=block_id,
@@ -30,8 +31,8 @@ def block(
         document_id="doc-1",
         page_start=1,
         page_end=1,
-        block_type="paragraph",
-        label=None,
+        block_type=block_type,
+        label="Figure 1" if block_type == "figure" else None,
     )
 
 
@@ -104,3 +105,46 @@ class AdaptiveContextBuilderTest(unittest.TestCase):
         self.assertEqual(len(built.selected), 1)
         self.assertGreaterEqual(built.stats.dropped_duplicate_count, 2)
         self.assertGreaterEqual(built.stats.dropped_budget_count, 1)
+
+    def test_includes_best_visual_candidate_when_text_selection_has_no_visuals(self):
+        builder = ContextBuilder(
+            ContextBuilderSettings(
+                min_blocks=2,
+                soft_target_blocks=3,
+                max_blocks=5,
+                adaptive_score_threshold=0.20,
+                max_context_chars=20000,
+            )
+        )
+        ranked = [
+            block("text-1", "first text block", 1.00),
+            block("text-2", "second text block", 0.95),
+            block("text-3", "third text block", 0.90),
+            block(
+                "visual-1",
+                "figure surrogate text",
+                0.50,
+                payload={
+                    "has_visual_evidence": True,
+                    "bbox": [10.0, 20.0, 110.0, 120.0],
+                    "page_number": 1,
+                },
+                block_type="figure",
+            ),
+        ]
+
+        built = builder.build("query", ranked)
+
+        self.assertIn("visual-1", [item.block.block_id for item in built.selected])
+        self.assertEqual(len(built.visual_hints.selected), 1)
+        self.assertEqual(built.visual_hints.selected[0].block_id, "visual-1")
+
+    def test_logs_input_and_selected_block_types(self):
+        builder = ContextBuilder(ContextBuilderSettings(min_blocks=1, soft_target_blocks=1, max_blocks=2))
+
+        with self.assertLogs("app.services.context_builder", level="INFO") as logs:
+            builder.build("query", [block("text-1", "text", 1.0)])
+
+        output = "\n".join(logs.output)
+        self.assertIn("input block types", output)
+        self.assertIn("selected evidence block types", output)

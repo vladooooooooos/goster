@@ -77,7 +77,14 @@ class LocalRerankerService:
         )
         selected = reranked[:top_n]
         top_scores = [round(item.rerank_score, 4) for item in selected if item.rerank_score is not None]
-        logger.info("Reranked %s candidate block(s); selected %s; top scores=%s.", len(candidates), len(selected), top_scores)
+        top_block_types = [item.block_type or "unknown" for item in selected]
+        logger.info(
+            "Reranked %s candidate block(s); selected %s; top scores=%s; top block types=%s.",
+            len(candidates),
+            len(selected),
+            top_scores,
+            top_block_types,
+        )
         return selected
 
     def _predict_scores(self, pairs: list[tuple[str, str]]) -> Any:

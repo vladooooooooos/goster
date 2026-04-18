@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -11,6 +12,8 @@ from app.services.visual_evidence import (
     guard_visual_decision,
     parse_visual_decision,
 )
+
+logger = logging.getLogger(__name__)
 
 NO_RELIABLE_ANSWER = "В документах не найдено достаточно надежной информации для ответа."
 
@@ -149,6 +152,11 @@ class RagService:
 
         visual_decision = await self._decide_visual_evidence(built_context)
         visual_evidence = self._generate_visual_evidence(built_context, visual_decision)
+        logger.info(
+            "Returned %s visual attachment(s): %s.",
+            len(visual_evidence),
+            [visual.block_id for visual in visual_evidence],
+        )
         visual_by_block_id = {visual.block_id: visual for visual in visual_evidence}
         retrieval_info = _with_context_info(retrieval_result.info, built_context, visual_decision, visual_evidence)
         prompt = _build_grounded_prompt(built_context)

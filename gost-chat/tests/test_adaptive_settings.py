@@ -34,6 +34,11 @@ class AdaptiveSettingsTest(unittest.TestCase):
         self.assertEqual(settings.visual_crop_dpi, 160)
         self.assertEqual(settings.visual_max_crops_per_answer, 1)
 
+    def test_settings_use_broad_default_reranker_pool(self):
+        settings = Settings()
+
+        self.assertEqual(settings.reranker_top_n, 12)
+
     def test_context_builder_settings_accept_adaptive_values(self):
         settings = ContextBuilderSettings(
             min_blocks=2,
