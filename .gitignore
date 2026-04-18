@@ -30,6 +30,7 @@ indexator/.test_tmp/
 
 # Codex-only local instructions
 .codex/
+.worktrees/
 indexator/agents.md
 indexator/AGENTS.md
 indexator/RULES.md
