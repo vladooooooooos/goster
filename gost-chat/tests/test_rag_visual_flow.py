@@ -14,17 +14,18 @@ from app.services.visual_crop_service import GeneratedCrop
 
 
 class FakeLlmService:
-    def __init__(self):
+    def __init__(self, visual_decision: str | None = None):
         self.calls = []
+        self.visual_decision = visual_decision or (
+            '{"mode":"inspect_visual_and_show","target_block_ids":["v1"],'
+            '"show_in_sources":true,"show_in_answer":true,'
+            '"needs_multimodal_followup":true,"reason":"Formula may be visual."}'
+        )
 
     async def chat(self, messages):
         self.calls.append(messages)
         if "Return only JSON" in messages[-1]["content"]:
-            return (
-                '{"mode":"inspect_visual_and_show","target_block_ids":["v1"],'
-                '"show_in_sources":true,"show_in_answer":true,'
-                '"needs_multimodal_followup":true,"reason":"Formula may be visual."}'
-            )
+            return self.visual_decision
         return "The text supports the answer [1]. A related visual fragment is attached."
 
 
@@ -109,3 +110,28 @@ class RagVisualFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(answer.citations[0].visual_evidence.crop_url, "/crops/doc-1/page-2-v1.png")
         self.assertEqual(answer.retrieval_info["visual"]["decision"]["mode"], "inspect_visual_and_show")
         self.assertIn("Returned 1 visual attachment", "\n".join(logs.output))
+
+    async def test_explicit_visual_request_overrides_text_only_decision(self):
+        service = RagService(
+            llm_service=FakeLlmService(
+                visual_decision=(
+                    '{"mode":"text_only","target_block_ids":[],"show_in_sources":false,'
+                    '"show_in_answer":false,"needs_multimodal_followup":false,'
+                    '"reason":"The text is enough."}'
+                )
+            ),
+            retrieval_pipeline=FakeRetrievalPipeline(),
+            context_builder=ContextBuilder(ContextBuilderSettings(min_blocks=1, soft_target_blocks=1, max_blocks=2)),
+            visual_crop_service=FakeCropService(),
+            visual_decision_enabled=True,
+            visual_max_crops_per_answer=1,
+        )
+
+        with self.assertLogs("app.services.rag_service", level="INFO") as logs:
+            answer = await service.answer_question("дай фотографию расположения раковины", top_k=12)
+
+        self.assertEqual(len(answer.visual_evidence), 1)
+        self.assertEqual(answer.visual_evidence[0].block_id, "v1")
+        self.assertEqual(answer.retrieval_info["visual"]["decision"]["mode"], "show_visual")
+        self.assertTrue(answer.retrieval_info["visual"]["decision"]["show_in_sources"])
+        self.assertIn("Explicit visual request promoted visual decision", "\n".join(logs.output))

@@ -15,6 +15,43 @@ from app.services.visual_evidence import (
 
 logger = logging.getLogger(__name__)
 
+_VISUAL_REQUEST_TERMS = (
+    "show",
+    "display",
+    "give",
+    "provide",
+    "attach",
+    "return",
+    "\u043f\u043e\u043a\u0430\u0436",
+    "\u0434\u0430\u0439",
+    "\u0434\u0430\u0439\u0442\u0435",
+    "\u0432\u044b\u0434\u0430\u0439",
+    "\u0432\u044b\u0432\u0435\u0434",
+    "\u043f\u0440\u0435\u0434\u043e\u0441\u0442\u0430\u0432",
+    "\u043f\u0440\u0438\u0448\u043b",
+)
+_VISUAL_OBJECT_TERMS = (
+    "image",
+    "picture",
+    "photo",
+    "figure",
+    "drawing",
+    "diagram",
+    "scheme",
+    "table",
+    "formula",
+    "\u0444\u043e\u0442\u043e",
+    "\u0444\u043e\u0442\u043e\u0433\u0440\u0430\u0444",
+    "\u043a\u0430\u0440\u0442\u0438\u043d",
+    "\u0438\u0437\u043e\u0431\u0440\u0430\u0436",
+    "\u0440\u0438\u0441\u0443\u043d",
+    "\u0447\u0435\u0440\u0442\u0435\u0436",
+    "\u0441\u0445\u0435\u043c",
+    "\u0434\u0438\u0430\u0433\u0440\u0430\u043c",
+    "\u0442\u0430\u0431\u043b\u0438\u0446",
+    "\u0444\u043e\u0440\u043c\u0443\u043b",
+)
+
 NO_RELIABLE_ANSWER = "В документах не найдено достаточно надежной информации для ответа."
 
 RAG_SYSTEM_PROMPT = (
@@ -190,7 +227,23 @@ class RagService:
         prompt = _build_visual_decision_prompt(built_context)
         raw = await self._llm_service.chat([{"role": "user", "content": prompt}])
         decision = parse_visual_decision(raw)
-        return guard_visual_decision(decision, refs, max_targets=self._visual_max_crops_per_answer)
+        guarded = guard_visual_decision(decision, refs, max_targets=self._visual_max_crops_per_answer)
+        if guarded.mode == "text_only" and _is_explicit_visual_request(built_context.query):
+            promoted = _visual_decision_for_explicit_request(refs, self._visual_max_crops_per_answer)
+            if promoted.mode != "text_only":
+                logger.info(
+                    "Explicit visual request promoted visual decision from text_only to %s; target block ids=%s.",
+                    promoted.mode,
+                    promoted.target_block_ids,
+                )
+                return promoted
+        logger.info(
+            "Visual decision mode=%s; target block ids=%s; reason=%s.",
+            guarded.mode,
+            guarded.target_block_ids,
+            guarded.reason,
+        )
+        return guarded
 
     def _generate_visual_evidence(
         self,
@@ -209,6 +262,7 @@ class RagService:
                 continue
             crop = self._visual_crop_service.get_or_create_crop(ref)
             if crop is None:
+                logger.info("Visual crop was not generated for block_id=%s.", block_id)
                 continue
             visual_evidence.append(_rag_visual_from_crop(ref, crop))
         return visual_evidence
@@ -242,6 +296,30 @@ def _build_visual_decision_prompt(built_context: BuiltContext) -> str:
             "Visual hints:",
             str(built_context.visual_hints.to_dict()),
         ]
+    )
+
+
+def _is_explicit_visual_request(query: str) -> bool:
+    normalized = query.casefold()
+    asks_to_show = any(term in normalized for term in _VISUAL_REQUEST_TERMS)
+    names_visual_object = any(term in normalized for term in _VISUAL_OBJECT_TERMS)
+    return asks_to_show and names_visual_object
+
+
+def _visual_decision_for_explicit_request(
+    refs: list[VisualEvidenceRef],
+    max_targets: int,
+) -> VisualEvidenceDecision:
+    target_block_ids = [ref.block_id for ref in refs[: max(0, max_targets)]]
+    if not target_block_ids:
+        return VisualEvidenceDecision.text_only("No visual target blocks are available for the explicit request.")
+    return VisualEvidenceDecision(
+        mode="show_visual",
+        target_block_ids=target_block_ids,
+        show_in_sources=True,
+        show_in_answer=True,
+        needs_multimodal_followup=False,
+        reason="The user explicitly asked to show visual evidence.",
     )
 
 
