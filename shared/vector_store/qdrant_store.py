@@ -1,9 +1,9 @@
-"""Shared local Qdrant vector store infrastructure."""
+"""Shared Qdrant server vector store infrastructure."""
 
 from __future__ import annotations
 
 from time import perf_counter
-from typing import Any
+from typing import Any, Callable
 
 from qdrant_client import QdrantClient, models
 
@@ -12,28 +12,30 @@ from .models import VectorPoint, VectorSearchResult, VectorStorageRun
 
 
 class QdrantVectorStore:
-    """Reusable local Qdrant vector store for GOSTer apps."""
+    """Reusable Qdrant server vector store for GOSTer apps."""
 
-    def __init__(self, config: QdrantVectorStoreConfig) -> None:
-        self.local_path = config.local_path
+    def __init__(
+        self,
+        config: QdrantVectorStoreConfig,
+        client_factory: Callable[..., Any] = QdrantClient,
+    ) -> None:
+        self.config = config
         self.collection_name = config.collection_name
         self.distance_metric = config.distance_metric
-        self.local_path.mkdir(parents=True, exist_ok=True)
-        self.client = QdrantClient(path=str(self.local_path))
+        self.endpoint = config.endpoint
+        self.client = client_factory(**make_client_kwargs(config))
 
     def ensure_collection(self, embedding_dimension: int) -> None:
         """Create the collection if it does not already exist."""
         if embedding_dimension <= 0:
             raise ValueError("Embedding dimension must be greater than zero.")
-        if self.client.collection_exists(self.collection_name):
+        if self.call_qdrant(self.client.collection_exists, self.collection_name):
             return
 
-        self.client.create_collection(
+        self.call_qdrant(
+            self.client.create_collection,
             collection_name=self.collection_name,
-            vectors_config=models.VectorParams(
-                size=embedding_dimension,
-                distance=resolve_distance(self.distance_metric),
-            ),
+            vectors_config=make_vectors_config(embedding_dimension, self.distance_metric),
         )
 
     def upsert_points(self, points: list[VectorPoint], embedding_dimension: int) -> VectorStorageRun:
@@ -41,7 +43,7 @@ class QdrantVectorStore:
         if not points:
             return VectorStorageRun(
                 collection_name=self.collection_name,
-                local_path=self.local_path,
+                endpoint=self.endpoint,
                 stored_points=0,
                 embedding_dimension=embedding_dimension,
                 elapsed_seconds=0.0,
@@ -49,7 +51,8 @@ class QdrantVectorStore:
 
         self.ensure_collection(embedding_dimension)
         start_time = perf_counter()
-        self.client.upsert(
+        self.call_qdrant(
+            self.client.upsert,
             collection_name=self.collection_name,
             points=[
                 models.PointStruct(id=point.id, vector=point.vector, payload=point.payload)
@@ -61,7 +64,7 @@ class QdrantVectorStore:
 
         return VectorStorageRun(
             collection_name=self.collection_name,
-            local_path=self.local_path,
+            endpoint=self.endpoint,
             stored_points=len(points),
             embedding_dimension=embedding_dimension,
             elapsed_seconds=elapsed_seconds,
@@ -69,11 +72,12 @@ class QdrantVectorStore:
 
     def search(self, vector: list[float], top_k: int, with_payload: bool = True) -> list[VectorSearchResult]:
         """Search the configured Qdrant collection by vector."""
-        if not self.client.collection_exists(self.collection_name):
+        if not self.call_qdrant(self.client.collection_exists, self.collection_name):
             return []
 
         if hasattr(self.client, "query_points"):
-            response = self.client.query_points(
+            response = self.call_qdrant(
+                self.client.query_points,
                 collection_name=self.collection_name,
                 query=vector,
                 limit=top_k,
@@ -82,7 +86,8 @@ class QdrantVectorStore:
             points = list(getattr(response, "points", response))
         else:
             points = list(
-                self.client.search(
+                self.call_qdrant(
+                    self.client.search,
                     collection_name=self.collection_name,
                     query_vector=vector,
                     limit=top_k,
@@ -93,8 +98,49 @@ class QdrantVectorStore:
         return [make_search_result(point) for point in points]
 
     def close(self) -> None:
-        """Close the local Qdrant client and release the storage lock."""
+        """Close the Qdrant client."""
         self.client.close()
+
+    def call_qdrant(self, operation: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        """Run a Qdrant operation and wrap connection failures with endpoint context."""
+        try:
+            return operation(*args, **kwargs)
+        except QdrantServerConnectionError:
+            raise
+        except Exception as error:
+            raise QdrantServerConnectionError(self.endpoint, error) from error
+
+
+class QdrantServerConnectionError(RuntimeError):
+    """Raised when the configured Qdrant server cannot be reached."""
+
+    def __init__(self, endpoint: str, cause: Exception) -> None:
+        super().__init__(f"Qdrant server is not reachable at {endpoint}: {cause}")
+        self.endpoint = endpoint
+        self.cause = cause
+
+
+def make_client_kwargs(config: QdrantVectorStoreConfig) -> dict[str, Any]:
+    """Build qdrant-client keyword arguments for server mode."""
+    kwargs: dict[str, Any]
+    if config.url.strip():
+        kwargs = {"url": config.url.strip()}
+    else:
+        kwargs = {"host": config.host, "port": config.port, "https": config.https}
+
+    if config.api_key:
+        kwargs["api_key"] = config.api_key
+    if config.timeout_seconds > 0:
+        kwargs["timeout"] = config.timeout_seconds
+    return kwargs
+
+
+def make_vectors_config(embedding_dimension: int, distance_metric: str) -> models.VectorParams:
+    """Build vector params in one place for future server-side storage tuning."""
+    return models.VectorParams(
+        size=embedding_dimension,
+        distance=resolve_distance(distance_metric),
+    )
 
 
 def make_search_result(point: Any) -> VectorSearchResult:

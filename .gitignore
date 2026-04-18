@@ -29,6 +29,7 @@ goster_vector_store_smoke_*/
 indexator/.test_tmp/
 
 # Codex-only local instructions
+.codex/
 indexator/agents.md
 indexator/AGENTS.md
 indexator/RULES.md

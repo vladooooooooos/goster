@@ -60,7 +60,7 @@ class IndexingProgress:
 
 
 class IndexingPipeline:
-    """Run parse, block building, embedding, and local Qdrant storage for PDFs."""
+    """Run parse, block building, embedding, and Qdrant server storage for PDFs."""
 
     def __init__(
         self,
@@ -83,7 +83,7 @@ class IndexingPipeline:
         pdf_paths: list[Path],
         progress_callback: ProgressCallback | None = None,
     ) -> IndexingRunSummary:
-        """Index selected PDFs into local Qdrant."""
+        """Index selected PDFs into Qdrant server."""
         start_time = perf_counter()
         results: list[IndexedFileResult] = []
         total_files = len(pdf_paths)

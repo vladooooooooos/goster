@@ -152,7 +152,7 @@ gost-chat/
 - Polza.ai API key или другой OpenAI-compatible provider для remote generation.
 - Подготовленные indexed data:
   - либо JSON index в `gost-chat/data/`;
-  - либо shared Qdrant store в `shared/data/qdrant/`, обычно созданный Indexator.
+  - or a shared Qdrant server collection, usually created by Indexator.
 
 ## Рекомендуемая установка через корневую среду
 
@@ -221,7 +221,12 @@ GOST_CHAT_LLM_API_KEY_ENV_VAR=POLZA_API_KEY
 GOST_CHAT_INDEXER_OUTPUT_DIR=data
 GOST_CHAT_LOG_LEVEL=INFO
 GOST_CHAT_RETRIEVAL_BACKEND=auto
-GOST_CHAT_QDRANT_LOCAL_PATH=../shared/data/qdrant
+GOST_CHAT_QDRANT_URL=http://127.0.0.1:6333
+GOST_CHAT_QDRANT_HOST=127.0.0.1
+GOST_CHAT_QDRANT_PORT=6333
+GOST_CHAT_QDRANT_HTTPS=false
+GOST_CHAT_QDRANT_TIMEOUT_SECONDS=5.0
+GOST_CHAT_QDRANT_API_KEY=
 GOST_CHAT_QDRANT_COLLECTION_NAME=gost_blocks
 GOST_CHAT_EMBEDDING_MODEL_NAME=BAAI/bge-m3
 GOST_CHAT_EMBEDDING_DEVICE=auto
@@ -239,12 +244,12 @@ GOST_CHAT_RERANKER_ENABLED=true
 ```
 
 2. Выбрать папку с PDFs и выполнить indexing.
-3. Убедиться, что shared Qdrant data лежит в `shared/data/qdrant/`.
+3. Ensure the local Qdrant server is running at `http://127.0.0.1:6333`.
 4. В `gost-chat/.env` оставить:
 
 ```text
 GOST_CHAT_RETRIEVAL_BACKEND=auto
-GOST_CHAT_QDRANT_LOCAL_PATH=../shared/data/qdrant
+GOST_CHAT_QDRANT_URL=http://127.0.0.1:6333
 GOST_CHAT_QDRANT_COLLECTION_NAME=gost_blocks
 ```
 
@@ -416,5 +421,5 @@ python scripts/polza_llm_smoke.py
 - Frontend вызывает только FastAPI backend и никогда не обращается к LLM provider напрямую.
 - Default remote generation provider — Polza.ai at `https://polza.ai/api/v1`.
 - Default remote generation model — `google/gemma-4-31b-it`.
-- Retrieval local-first: JSON fallback читает `gost-chat/data`, vector path читает `shared/data/qdrant`.
+- Retrieval local-first: JSON fallback reads `gost-chat/data`; vector retrieval reads the configured Qdrant server collection.
 - Indexing остаётся external step: основной сценарий через Indexator, fallback через `apps/indexer`.

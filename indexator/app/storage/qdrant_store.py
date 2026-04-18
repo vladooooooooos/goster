@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
+from typing import Any, Callable
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
@@ -19,7 +20,6 @@ from shared.vector_store import (  # noqa: E402
     QdrantVectorStore,
     QdrantVectorStoreConfig,
     make_gost_block_point,
-    resolve_local_path,
 )
 
 from app.core.blocks import StructuredBlock
@@ -29,10 +29,10 @@ from app.utils.config import StorageConfig
 
 @dataclass(frozen=True)
 class QdrantStorageRun:
-    """Debug metadata for one local Qdrant upsert run."""
+    """Debug metadata for one Qdrant server upsert run."""
 
     collection_name: str
-    local_path: Path
+    endpoint: str
     stored_blocks: int
     embedding_dimension: int
     elapsed_seconds: float
@@ -40,7 +40,7 @@ class QdrantStorageRun:
 
 @dataclass(frozen=True)
 class QdrantDocumentDeletionResult:
-    """Per-document local Qdrant deletion result."""
+    """Per-document Qdrant server deletion result."""
 
     document_id: str
     removed_points: int
@@ -50,10 +50,10 @@ class QdrantDocumentDeletionResult:
 
 @dataclass(frozen=True)
 class QdrantDocumentDeletionRun:
-    """Summary of local Qdrant deletion by document id."""
+    """Summary of Qdrant server deletion by document id."""
 
     collection_name: str
-    local_path: Path
+    endpoint: str
     requested_documents: int
     removed_documents: int
     skipped_documents: int
@@ -64,38 +64,49 @@ class QdrantDocumentDeletionRun:
 
 @dataclass(frozen=True)
 class QdrantClearRun:
-    """Summary of a local Qdrant collection clear operation."""
+    """Summary of a Qdrant server collection clear operation."""
 
     collection_name: str
-    local_path: Path
+    endpoint: str
     collection_existed: bool
     removed_points: int
     elapsed_seconds: float
 
 
 class QdrantStore:
-    """Persistent local Qdrant store for vectorized structured blocks."""
+    """Qdrant server store for vectorized structured blocks."""
 
-    def __init__(self, local_path: Path, collection_name: str, distance_metric: str = "Cosine") -> None:
+    def __init__(
+        self,
+        config: QdrantVectorStoreConfig,
+        client_factory: Callable[..., Any] | None = None,
+    ) -> None:
+        vector_store_kwargs: dict[str, Any] = {}
+        if client_factory is not None:
+            vector_store_kwargs["client_factory"] = client_factory
         self.vector_store = QdrantVectorStore(
-            QdrantVectorStoreConfig(
-                local_path=local_path,
-                collection_name=collection_name,
-                distance_metric=distance_metric,
-            )
+            config,
+            **vector_store_kwargs,
         )
-        self.local_path = self.vector_store.local_path
+        self.endpoint = self.vector_store.endpoint
         self.collection_name = self.vector_store.collection_name
         self.distance_metric = self.vector_store.distance_metric
         self.client = self.vector_store.client
 
     @classmethod
     def from_config(cls, config: StorageConfig, app_root: Path) -> "QdrantStore":
-        """Create a local Qdrant store from application config."""
+        """Create a Qdrant server store from application config."""
         return cls(
-            local_path=resolve_local_path(config.local_path, app_root),
-            collection_name=config.collection_name,
-            distance_metric=config.distance_metric,
+            QdrantVectorStoreConfig(
+                collection_name=config.collection_name,
+                distance_metric=config.distance_metric,
+                url=config.url,
+                host=config.host,
+                port=config.port,
+                https=config.https,
+                api_key=config.api_key,
+                timeout_seconds=config.timeout_seconds,
+            )
         )
 
     def ensure_collection(self, embedding_dimension: int) -> None:
@@ -108,7 +119,7 @@ class QdrantStore:
         embedding_run: BlockEmbeddingRun,
         indexed_at: str | None = None,
     ) -> QdrantStorageRun:
-        """Store structured blocks and their embeddings in local Qdrant."""
+        """Store structured blocks and their embeddings in Qdrant server."""
         resolved_indexed_at = indexed_at or utc_now_iso()
         blocks_by_id = {block.id: block for block in blocks}
         points = [
@@ -125,7 +136,7 @@ class QdrantStore:
         )
         return QdrantStorageRun(
             collection_name=storage_run.collection_name,
-            local_path=storage_run.local_path,
+            endpoint=storage_run.endpoint,
             stored_blocks=storage_run.stored_points,
             embedding_dimension=storage_run.embedding_dimension,
             elapsed_seconds=storage_run.elapsed_seconds,
@@ -133,10 +144,11 @@ class QdrantStore:
 
     def count_document_points(self, document_id: str) -> int:
         """Return point count for one document id without failing on missing collections."""
-        if not self.client.collection_exists(self.collection_name):
+        if not self.vector_store.call_qdrant(self.client.collection_exists, self.collection_name):
             return 0
 
-        result = self.client.count(
+        result = self.vector_store.call_qdrant(
+            self.client.count,
             collection_name=self.collection_name,
             count_filter=make_document_filter([document_id]),
             exact=True,
@@ -149,10 +161,10 @@ class QdrantStore:
         unique_document_ids = unique_nonempty(document_ids)
         results: list[QdrantDocumentDeletionResult] = []
 
-        if not self.client.collection_exists(self.collection_name):
+        if not self.vector_store.call_qdrant(self.client.collection_exists, self.collection_name):
             return QdrantDocumentDeletionRun(
                 collection_name=self.collection_name,
-                local_path=self.local_path,
+                endpoint=self.endpoint,
                 requested_documents=len(unique_document_ids),
                 removed_documents=0,
                 skipped_documents=len(unique_document_ids),
@@ -168,7 +180,8 @@ class QdrantStore:
             try:
                 point_count = self.count_document_points(document_id)
                 if point_count:
-                    self.client.delete(
+                    self.vector_store.call_qdrant(
+                        self.client.delete,
                         collection_name=self.collection_name,
                         points_selector=models.FilterSelector(filter=make_document_filter([document_id])),
                         wait=True,
@@ -194,7 +207,7 @@ class QdrantStore:
         skipped_documents = sum(1 for result in results if result.success and result.removed_points == 0)
         return QdrantDocumentDeletionRun(
             collection_name=self.collection_name,
-            local_path=self.local_path,
+            endpoint=self.endpoint,
             requested_documents=len(unique_document_ids),
             removed_documents=removed_documents,
             skipped_documents=skipped_documents,
@@ -206,25 +219,28 @@ class QdrantStore:
     def clear_all(self) -> QdrantClearRun:
         """Remove the configured collection while preserving the shared data root."""
         start_time = perf_counter()
-        collection_existed = self.client.collection_exists(self.collection_name)
+        collection_existed = self.vector_store.call_qdrant(self.client.collection_exists, self.collection_name)
         removed_points = 0
 
         if collection_existed:
-            count_result = self.client.count(collection_name=self.collection_name, exact=True)
+            count_result = self.vector_store.call_qdrant(
+                self.client.count,
+                collection_name=self.collection_name,
+                exact=True,
+            )
             removed_points = int(getattr(count_result, "count", 0) or 0)
-            self.client.delete_collection(collection_name=self.collection_name)
+            self.vector_store.call_qdrant(self.client.delete_collection, collection_name=self.collection_name)
 
-        self.local_path.mkdir(parents=True, exist_ok=True)
         return QdrantClearRun(
             collection_name=self.collection_name,
-            local_path=self.local_path,
+            endpoint=self.endpoint,
             collection_existed=collection_existed,
             removed_points=removed_points,
             elapsed_seconds=perf_counter() - start_time,
         )
 
     def close(self) -> None:
-        """Close the local Qdrant client and release the storage lock."""
+        """Close the Qdrant client."""
         self.vector_store.close()
 
 

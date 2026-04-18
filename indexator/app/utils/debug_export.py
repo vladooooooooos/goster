@@ -49,11 +49,11 @@ def export_embedding_summary(run: "BlockEmbeddingRun", output_path: Path) -> Pat
 
 
 def export_qdrant_storage_summary(run: "QdrantStorageRun", output_path: Path) -> Path:
-    """Write a compact local Qdrant storage debug summary."""
+    """Write a compact Qdrant server storage debug summary."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     summary = {
         "collection_name": run.collection_name,
-        "local_path": str(run.local_path),
+        "endpoint": run.endpoint,
         "stored_blocks": run.stored_blocks,
         "embedding_dimension": run.embedding_dimension,
         "elapsed_seconds": round(run.elapsed_seconds, 3),

@@ -3,21 +3,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 
 @dataclass(frozen=True)
 class QdrantVectorStoreConfig:
-    """Connection and collection settings for a local Qdrant store."""
+    """Connection and collection settings for a Qdrant server."""
 
-    local_path: Path
     collection_name: str
     distance_metric: str = "Cosine"
+    url: str = "http://127.0.0.1:6333"
+    host: str = "127.0.0.1"
+    port: int = 6333
+    https: bool = False
+    api_key: str | None = None
+    timeout_seconds: float = 5.0
 
-
-def resolve_local_path(local_path: str | Path, app_root: Path | None = None) -> Path:
-    """Resolve a local Qdrant path relative to an optional application root."""
-    resolved_path = Path(local_path)
-    if not resolved_path.is_absolute() and app_root is not None:
-        resolved_path = app_root / resolved_path
-    return resolved_path.resolve()
+    @property
+    def endpoint(self) -> str:
+        """Return the effective Qdrant endpoint for logs and errors."""
+        if self.url.strip():
+            return self.url.strip()
+        scheme = "https" if self.https else "http"
+        return f"{scheme}://{self.host}:{self.port}"

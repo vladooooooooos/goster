@@ -42,7 +42,7 @@ from app.services.reindex_service import ReindexRunSummary, ReindexService
 from app.storage.document_registry import DocumentRegistry
 from app.storage.qdrant_store import QdrantStore
 from app.ui.index_worker import IndexWorker
-from app.utils.config import AppConfig
+from app.utils.config import AppConfig, resolve_shared_data_path
 
 
 TRANSLATIONS = {
@@ -105,7 +105,7 @@ TRANSLATIONS = {
         "no_embed_selection": "Select one ready PDF file before embedding blocks.",
         "embedding_preview": "Embedding structured block preview for: {file_name}",
         "no_store_selection": "Select one ready PDF file before storing blocks.",
-        "storing_preview": "Storing structured block preview in local Qdrant for: {file_name}",
+        "storing_preview": "Storing structured block preview in Qdrant server for: {file_name}",
         "no_clear_selection": "No checked PDF files selected for clearing.",
         "clear_selected_title": "Clear selected indexed documents",
         "clear_selected_message": (
@@ -117,18 +117,18 @@ TRANSLATIONS = {
         "clearing_selected": "Clearing selected document(s): {count}.",
         "clear_all_title": "Clear all shared index data",
         "clear_all_message": (
-            "This will wipe the whole shared local index for Indexator and chat retrieval.\n\n"
-            "Shared index root: {shared_root}\n"
+            "This will wipe the configured Qdrant collection for Indexator and chat retrieval.\n\n"
+            "Qdrant endpoint: {endpoint}\n"
             "Qdrant collection: {collection}\n\n"
-            "Only index-owned data will be removed. Source PDFs will not be deleted."
+            "Index-owned metadata and cache data will also be cleared. Source PDFs will not be deleted."
         ),
         "clear_all_cancelled": "Clear all cancelled.",
-        "clearing_all": "Clearing all shared index data under: {shared_root}",
+        "clearing_all": "Clearing Qdrant collection {collection} at {endpoint}",
         "stage_parse": "Parsing",
         "stage_scan": "Scanning PDFs",
         "stage_build_blocks": "Building structured blocks",
         "stage_embed": "Embedding structured blocks",
-        "stage_store": "Storing vectors in local Qdrant",
+        "stage_store": "Storing vectors in Qdrant server",
         "stage_clear": "Clearing index data",
         "stage_done": "Finished",
         "stage_failed": "Failed",
@@ -194,7 +194,7 @@ TRANSLATIONS = {
         "no_embed_selection": "Выберите один готовый PDF-файл для предпросмотра эмбеддингов.",
         "embedding_preview": "Предпросмотр эмбеддингов для: {file_name}",
         "no_store_selection": "Выберите один готовый PDF-файл перед сохранением блоков.",
-        "storing_preview": "Сохранение preview-блоков в локальный Qdrant для: {file_name}",
+        "storing_preview": "Storing preview blocks in Qdrant server for: {file_name}",
         "no_clear_selection": "Не выбраны PDF-файлы для очистки.",
         "clear_selected_title": "Очистить выбранные индексные данные",
         "clear_selected_message": (
@@ -206,18 +206,18 @@ TRANSLATIONS = {
         "clearing_selected": "Очистка выбранных документов: {count}.",
         "clear_all_title": "Очистить общий индекс",
         "clear_all_message": (
-            "Будет очищен общий локальный индекс для Indexator и chat retrieval.\n\n"
-            "Корень общего индекса: {shared_root}\n"
-            "Коллекция Qdrant: {collection}\n\n"
-            "Будут удалены только индексные данные. Исходные PDF не будут удалены."
+            "This will wipe the configured Qdrant collection for Indexator and chat retrieval.\n\n"
+            "Qdrant endpoint: {endpoint}\n"
+            "Qdrant collection: {collection}\n\n"
+            "Index-owned metadata and cache data will also be cleared. Source PDFs will not be deleted."
         ),
         "clear_all_cancelled": "Полная очистка отменена.",
-        "clearing_all": "Очистка общих индексных данных: {shared_root}",
+        "clearing_all": "Clearing Qdrant collection {collection} at {endpoint}",
         "stage_parse": "Парсинг",
         "stage_scan": "Сканирование PDF",
         "stage_build_blocks": "Построение структурных блоков",
         "stage_embed": "Расчёт эмбеддингов",
-        "stage_store": "Сохранение в локальный Qdrant",
+        "stage_store": "Storing vectors in Qdrant server",
         "stage_clear": "Очистка индекса",
         "stage_done": "Готово",
         "stage_failed": "Ошибка",
@@ -250,7 +250,7 @@ class MainWindow(QMainWindow):
         self.embedding_service = StructuredBlockEmbeddingService.from_config(config.embedding)
         self.app_root = Path(__file__).resolve().parents[2]
         self.qdrant_store = QdrantStore.from_config(config.storage, self.app_root)
-        self.document_registry = DocumentRegistry(self.qdrant_store.local_path.parent)
+        self.document_registry = DocumentRegistry(resolve_shared_data_path(config.storage.shared_data_path, self.app_root))
         self.deletion_service = IndexDeletionService(self.qdrant_store, self.document_registry)
         self.indexing_pipeline = IndexingPipeline(
             parser=self.pdf_parser,
@@ -783,11 +783,11 @@ class MainWindow(QMainWindow):
             pdf_path = result.get("pdf_path")
             if storage_run is not None and isinstance(pdf_path, Path):
                 self._append_log(
-                    f"Stored {storage_run.stored_blocks} block(s) from {pdf_path.name} in local Qdrant: "
+                    f"Stored {storage_run.stored_blocks} block(s) from {pdf_path.name} in Qdrant server: "
                     f"collection={storage_run.collection_name}, dimension={storage_run.embedding_dimension}, "
-                    f"path={storage_run.local_path}, elapsed={storage_run.elapsed_seconds:.2f}s."
+                    f"endpoint={storage_run.endpoint}, elapsed={storage_run.elapsed_seconds:.2f}s."
                 )
-                self._append_log(f"Local Qdrant storage summary export: {result.get('debug_path')}")
+                self._append_log(f"Qdrant server storage summary export: {result.get('debug_path')}")
         elif mode == "clear_selected" and isinstance(summary, ClearOperationSummary):
             self._append_clear_summary(summary)
             self._append_log(f"Clear selected summary export: {summary_path}")
@@ -1119,17 +1119,26 @@ class MainWindow(QMainWindow):
         self._start_index_worker("clear_selected", document_ids=document_ids)
 
     def _clear_all(self) -> None:
-        shared_root = self.document_registry.shared_data_root
         if not self._confirm(
             self._text("clear_all_title"),
-            self._text("clear_all_message", shared_root=shared_root, collection=self.qdrant_store.collection_name),
+            self._text(
+                "clear_all_message",
+                endpoint=self.qdrant_store.endpoint,
+                collection=self.qdrant_store.collection_name,
+            ),
             QMessageBox.Icon.Warning,
         ):
             self._append_log(self._text("clear_all_cancelled"))
             return
 
         self.progress_bar.setValue(0)
-        self._append_log(self._text("clearing_all", shared_root=shared_root))
+        self._append_log(
+            self._text(
+                "clearing_all",
+                endpoint=self.qdrant_store.endpoint,
+                collection=self.qdrant_store.collection_name,
+            )
+        )
         self._start_index_worker("clear_all")
 
     def _checked_document_ids(self) -> list[str]:

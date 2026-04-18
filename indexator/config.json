@@ -16,7 +16,13 @@
   "storage": {
     "provider": "qdrant",
     "collection_name": "gost_blocks",
-    "local_path": "../shared/data/qdrant",
+    "url": "http://127.0.0.1:6333",
+    "host": "127.0.0.1",
+    "port": 6333,
+    "https": false,
+    "timeout_seconds": 5.0,
+    "api_key": "",
+    "shared_data_path": "../shared/data",
     "distance_metric": "Cosine"
   }
 }

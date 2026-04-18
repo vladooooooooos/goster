@@ -42,7 +42,7 @@ goster_vector_store_smoke_*/
 - PySide6
 - PyMuPDF
 - sentence-transformers / transformers / torch
-- qdrant-client с локальным persistent storage
+- qdrant-client connected to a local Qdrant server
 
 Точки входа и важные файлы:
 
@@ -213,7 +213,7 @@ cd goster
 Если нужно восстановить тот же локальный state, верните external artifacts вне Git:
 
 - PDF corpus в `docs/` или выбранную внешнюю папку
-- Сохранённое Qdrant store в `shared/data/qdrant/`
+- Local Qdrant server data managed by Qdrant, usually through `docker compose up qdrant`
 - Сохранённый JSON index в `gost-chat/data/`
 
 Сгенерированные артефакты можно также пересобрать из PDF.
@@ -237,7 +237,13 @@ python -c "import torch; print(torch.__version__); print(torch.cuda.is_available
 
 ### 3. Запустить Indexator
 
-Indexator читает `config.json`. По умолчанию он пишет shared Qdrant data в `shared/data/qdrant` относительно директории приложения.
+Indexator reads `config.json`. By default it writes vectors to the local Qdrant server at `http://127.0.0.1:6333`, collection `gost_blocks`.
+
+Start the local Qdrant server before indexing:
+
+```powershell
+docker compose up -d qdrant
+```
 
 На Windows можно также использовать переносимый лаунчер:
 
@@ -361,7 +367,7 @@ git remote set-url origin <repo-url>
 - Восстановить API keys через environment variables или secret manager.
 - Восстановить PDFs из external storage или взять минимальный лицензированный sample set.
 - Пересобрать `gost-chat/data/` через `gost-chat/apps/indexer/main.py`, если используется JSON retrieval.
-- Пересобрать или восстановить `shared/data/qdrant/`, если используется vector retrieval.
+- Start the local Qdrant server and reindex PDFs with Indexator when vector retrieval is used.
 - Запустить Indexator и проверить, что он сканирует папку с PDF.
 - Запустить GOST Chat и проверить `GET /health`.
 - Запустить smoke checks из `scripts/`.

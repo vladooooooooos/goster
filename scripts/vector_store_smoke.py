@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import argparse
 from contextlib import suppress
-import shutil
 import subprocess
 import sys
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -15,7 +13,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 COLLECTION_NAME = "goster_vector_store_smoke"
-SMOKE_TEMP_ROOT = REPO_ROOT / ".vector_store_smoke_tmp"
+DEFAULT_QDRANT_URL = "http://127.0.0.1:6333"
 VECTOR_SIZE = 4
 TARGET_VECTOR = [1.0, 0.0, 0.0, 0.0]
 
@@ -23,61 +21,51 @@ TARGET_VECTOR = [1.0, 0.0, 0.0, 0.0]
 def main() -> int:
     args = parse_args()
     if args.phase == "writer":
-        run_writer(args.qdrant_path)
+        run_writer(args.qdrant_url)
         return 0
     if args.phase == "reader":
-        run_reader(args.qdrant_path)
+        run_reader(args.qdrant_url)
         return 0
 
-    run_wrapper()
+    run_wrapper(args.qdrant_url)
     return 0
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase", choices=["wrapper", "writer", "reader"], default="wrapper")
-    parser.add_argument("--qdrant-path", type=Path)
+    parser.add_argument("--qdrant-url", default=DEFAULT_QDRANT_URL)
     return parser.parse_args()
 
 
-def run_wrapper() -> None:
-    temp_root = SMOKE_TEMP_ROOT / f"run_{uuid.uuid4().hex}"
-    qdrant_path = temp_root / "qdrant"
-    try:
-        qdrant_path.mkdir(parents=True, exist_ok=True)
-        run_phase("writer", qdrant_path)
-        run_phase("reader", qdrant_path)
-        print(
-            "Shared vector store smoke passed: "
-            f"collection={COLLECTION_NAME}, path={qdrant_path}"
-        )
-    finally:
-        shutil.rmtree(temp_root, ignore_errors=True)
-        with suppress(OSError):
-            SMOKE_TEMP_ROOT.rmdir()
+def run_wrapper(qdrant_url: str) -> None:
+    run_phase("writer", qdrant_url)
+    run_phase("reader", qdrant_url)
+    print(
+        "Shared vector store smoke passed: "
+        f"collection={COLLECTION_NAME}, endpoint={qdrant_url}"
+    )
 
 
-def run_phase(phase: str, qdrant_path: Path) -> None:
+def run_phase(phase: str, qdrant_url: str) -> None:
     command = [
         sys.executable,
         str(Path(__file__).resolve()),
         "--phase",
         phase,
-        "--qdrant-path",
-        str(qdrant_path),
+        "--qdrant-url",
+        qdrant_url,
     ]
     subprocess.run(command, cwd=REPO_ROOT, check=True)
 
 
-def run_writer(qdrant_path: Path | None) -> None:
-    if qdrant_path is None:
-        raise ValueError("--qdrant-path is required for writer phase.")
-
+def run_writer(qdrant_url: str) -> None:
     sys.path.insert(0, str(REPO_ROOT / "indexator"))
 
     from app.core.blocks import StructuredBlock
     from app.services.embedding_service import BlockEmbedding, BlockEmbeddingRun
     from app.storage.qdrant_store import QdrantStore
+    from shared.vector_store import QdrantVectorStoreConfig
 
     blocks = [
         StructuredBlock(
@@ -135,30 +123,36 @@ def run_writer(qdrant_path: Path | None) -> None:
     )
 
     store = QdrantStore(
-        local_path=qdrant_path,
-        collection_name=COLLECTION_NAME,
-        distance_metric="Cosine",
+        QdrantVectorStoreConfig(
+            collection_name=COLLECTION_NAME,
+            url=qdrant_url,
+            distance_metric="Cosine",
+        )
     )
     try:
+        with suppress(Exception):
+            store.clear_all()
         storage_run = store.upsert_block_embeddings(blocks, embedding_run)
         assert storage_run.collection_name == COLLECTION_NAME
-        assert storage_run.local_path == qdrant_path
+        assert storage_run.endpoint == qdrant_url
         assert storage_run.stored_blocks == 2
         assert storage_run.embedding_dimension == VECTOR_SIZE
     finally:
         store.close()
 
 
-def run_reader(qdrant_path: Path | None) -> None:
-    if qdrant_path is None:
-        raise ValueError("--qdrant-path is required for reader phase.")
-
+def run_reader(qdrant_url: str) -> None:
     sys.path.insert(0, str(REPO_ROOT / "gost-chat"))
 
     from app.services.qdrant_retriever import QdrantRetriever
 
     retriever = QdrantRetriever(
-        local_path=qdrant_path,
+        qdrant_url=qdrant_url,
+        qdrant_host="127.0.0.1",
+        qdrant_port=6333,
+        qdrant_https=False,
+        qdrant_api_key=None,
+        qdrant_timeout_seconds=5.0,
         collection_name=COLLECTION_NAME,
         embedding_service=FakeEmbeddingService(),
     )
@@ -166,7 +160,7 @@ def run_reader(qdrant_path: Path | None) -> None:
         results, info = retriever.search("find target", top_k=2)
         assert info["backend"] == "qdrant"
         assert info["collection_name"] == COLLECTION_NAME
-        assert info["local_path"] == str(qdrant_path)
+        assert info["endpoint"] == qdrant_url
         assert info["embedding_model"] == "smoke-embedding-model"
         assert info["embedding_device"] == "cpu"
         assert len(results) >= 1

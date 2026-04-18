@@ -1,6 +1,5 @@
 from functools import lru_cache
 from pathlib import Path
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,7 +18,12 @@ class Settings(BaseSettings):
     indexer_output_dir: Path = Path("data")
     log_level: str = "INFO"
     retrieval_backend: str = "auto"
-    qdrant_local_path: Path = Path("../shared/data/qdrant")
+    qdrant_url: str = "http://127.0.0.1:6333"
+    qdrant_host: str = "127.0.0.1"
+    qdrant_port: int = 6333
+    qdrant_https: bool = False
+    qdrant_api_key: str | None = None
+    qdrant_timeout_seconds: float = 5.0
     qdrant_collection_name: str = "gost_blocks"
     embedding_model_name: str = "BAAI/bge-m3"
     embedding_device: str = "auto"

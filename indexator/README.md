@@ -159,6 +159,7 @@ Source PDFs не входят в clear semantics. Indexator удаляет то�
 .\.venv\Scripts\Activate.ps1
 $env:PYTHONPATH="C:\goster\indexator"
 python -m unittest discover -s indexator\tests
+docker compose up -d qdrant
 python scripts\vector_store_smoke.py
 ```
 

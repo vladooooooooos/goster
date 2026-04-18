@@ -42,7 +42,12 @@ app.state.embedding_service = LocalEmbeddingService(
     )
 )
 app.state.qdrant_retriever = QdrantRetriever(
-    local_path=settings.qdrant_local_path,
+    qdrant_url=settings.qdrant_url,
+    qdrant_host=settings.qdrant_host,
+    qdrant_port=settings.qdrant_port,
+    qdrant_https=settings.qdrant_https,
+    qdrant_api_key=settings.qdrant_api_key,
+    qdrant_timeout_seconds=settings.qdrant_timeout_seconds,
     collection_name=settings.qdrant_collection_name,
     embedding_service=app.state.embedding_service,
 )

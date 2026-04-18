@@ -1,6 +1,6 @@
 """Shared vector store primitives for GOSTer apps."""
 
-from .config import QdrantVectorStoreConfig, resolve_local_path
+from .config import QdrantVectorStoreConfig
 from .models import GostBlockVector, GostPayloadFields, VectorPoint, VectorSearchResult, VectorStorageRun
 from .payloads import (
     estimate_tokens,
@@ -12,11 +12,12 @@ from .payloads import (
     parse_gost_payload,
     string_value,
 )
-from .qdrant_store import QdrantVectorStore, resolve_distance
+from .qdrant_store import QdrantServerConnectionError, QdrantVectorStore, resolve_distance
 
 __all__ = [
     "GostBlockVector",
     "GostPayloadFields",
+    "QdrantServerConnectionError",
     "QdrantVectorStore",
     "QdrantVectorStoreConfig",
     "VectorPoint",
@@ -30,6 +31,5 @@ __all__ = [
     "optional_int",
     "parse_gost_payload",
     "resolve_distance",
-    "resolve_local_path",
     "string_value",
 ]

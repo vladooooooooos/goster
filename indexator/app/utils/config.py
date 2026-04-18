@@ -32,8 +32,14 @@ class StorageConfig:
 
     provider: str
     collection_name: str
-    local_path: str
     distance_metric: str
+    url: str
+    host: str
+    port: int
+    https: bool
+    timeout_seconds: float
+    api_key: str | None
+    shared_data_path: str
 
 
 @dataclass(frozen=True)
@@ -82,7 +88,29 @@ def build_config(raw_config: dict[str, Any]) -> AppConfig:
         storage=StorageConfig(
             provider=str(raw_config["storage"]["provider"]),
             collection_name=str(raw_config["storage"]["collection_name"]),
-            local_path=str(raw_config["storage"]["local_path"]),
             distance_metric=str(raw_config["storage"].get("distance_metric", "Cosine")),
+            url=str(raw_config["storage"].get("url", "http://127.0.0.1:6333")),
+            host=str(raw_config["storage"].get("host", "127.0.0.1")),
+            port=int(raw_config["storage"].get("port", 6333)),
+            https=bool(raw_config["storage"].get("https", False)),
+            timeout_seconds=float(raw_config["storage"].get("timeout_seconds", 5.0)),
+            api_key=optional_string(raw_config["storage"].get("api_key")),
+            shared_data_path=str(raw_config["storage"].get("shared_data_path", "../shared/data")),
         ),
     )
+
+
+def optional_string(value: Any) -> str | None:
+    """Return a non-empty stripped string or None."""
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def resolve_shared_data_path(shared_data_path: str | Path, app_root: Path | None = None) -> Path:
+    """Resolve shared non-Qdrant index metadata path relative to the app root."""
+    resolved_path = Path(shared_data_path)
+    if not resolved_path.is_absolute() and app_root is not None:
+        resolved_path = app_root / resolved_path
+    return resolved_path.resolve()
