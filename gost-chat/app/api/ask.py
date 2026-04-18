@@ -2,7 +2,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from app.schemas.ask import AskCitation, AskRequest, AskResponse, AskRetrievedChunk
+from app.schemas.ask import AskCitation, AskRequest, AskResponse, AskRetrievedChunk, AskVisualEvidence
 from app.services.llm_service import LlmServiceError
 from app.services.rag_service import RagService
 from app.services.retriever import EmptyQueryError, IndexLoadError, IndexNotFoundError
@@ -41,9 +41,24 @@ async def ask(payload: AskRequest, request: Request) -> AskResponse:
     return AskResponse(
         query=result.query,
         answer=result.answer,
-        citations=[AskCitation(**citation.__dict__) for citation in result.citations],
+        citations=[_ask_citation(citation) for citation in result.citations],
         retrieved_results_count=result.retrieved_results_count,
         retrieval_used=result.retrieval_used,
-        retrieved_chunks=[AskRetrievedChunk(**chunk.__dict__) for chunk in result.retrieved_chunks],
+        retrieved_chunks=[_ask_retrieved_chunk(chunk) for chunk in result.retrieved_chunks],
         retrieval_info=result.retrieval_info,
+        visual_evidence=[AskVisualEvidence(**visual.__dict__) for visual in result.visual_evidence],
     )
+
+
+def _ask_citation(citation) -> AskCitation:
+    payload = dict(citation.__dict__)
+    if citation.visual_evidence:
+        payload["visual_evidence"] = AskVisualEvidence(**citation.visual_evidence.__dict__)
+    return AskCitation(**payload)
+
+
+def _ask_retrieved_chunk(chunk) -> AskRetrievedChunk:
+    payload = dict(chunk.__dict__)
+    if chunk.visual_evidence:
+        payload["visual_evidence"] = AskVisualEvidence(**chunk.visual_evidence.__dict__)
+    return AskRetrievedChunk(**payload)

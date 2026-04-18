@@ -6,6 +6,21 @@ class AskRequest(BaseModel):
     top_k: int = Field(12, ge=1, le=50, description="Maximum number of source chunks to retrieve.")
 
 
+class AskVisualEvidence(BaseModel):
+    block_id: str
+    document_id: str
+    source_file: str
+    page_number: int
+    block_type: str | None = None
+    label: str | None = None
+    crop_path: str
+    crop_url: str
+    width: int
+    height: int
+    format: str
+    dpi: int
+
+
 class AskCitation(BaseModel):
     document_id: str
     file_name: str
@@ -20,6 +35,10 @@ class AskCitation(BaseModel):
     section_path: list[str] | None = None
     retrieval_score: float | None = None
     rerank_score: float | None = None
+    block_type: str | None = None
+    label: str | None = None
+    has_visual_evidence: bool = False
+    visual_evidence: AskVisualEvidence | None = None
 
 
 class AskRetrievedChunk(BaseModel):
@@ -36,6 +55,10 @@ class AskRetrievedChunk(BaseModel):
     section_path: list[str] | None = None
     retrieval_score: float | None = None
     rerank_score: float | None = None
+    block_type: str | None = None
+    label: str | None = None
+    has_visual_evidence: bool = False
+    visual_evidence: AskVisualEvidence | None = None
 
 
 class AskResponse(BaseModel):
@@ -46,3 +69,4 @@ class AskResponse(BaseModel):
     retrieval_used: bool
     retrieved_chunks: list[AskRetrievedChunk]
     retrieval_info: dict[str, object] | None = None
+    visual_evidence: list[AskVisualEvidence] = Field(default_factory=list)

@@ -21,6 +21,7 @@ from app.services.rag_service import RagService
 from app.services.reranker_service import LocalRerankerService, RerankerSettings
 from app.services.retrieval_pipeline import RetrievalPipeline
 from app.services.retriever import Retriever
+from app.services.visual_crop_service import VisualCropService, VisualCropSettings
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -85,12 +86,24 @@ app.state.context_builder = ContextBuilder(
         adaptive_score_threshold=settings.context_adaptive_score_threshold,
     )
 )
+app.state.visual_crop_service = VisualCropService(
+    VisualCropSettings(
+        indexer_output_dir=settings.indexer_output_dir,
+        crops_dir=settings.visual_crops_dir,
+        dpi=settings.visual_crop_dpi,
+    )
+)
 app.state.rag_service = RagService(
     llm_service=app.state.llm_service,
     retrieval_pipeline=app.state.retrieval_pipeline,
     context_builder=app.state.context_builder,
+    visual_crop_service=app.state.visual_crop_service,
+    visual_decision_enabled=settings.visual_enable_decision,
+    visual_max_crops_per_answer=settings.visual_max_crops_per_answer,
 )
 
+settings.visual_crops_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/crops", StaticFiles(directory=settings.visual_crops_dir), name="crops")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
