@@ -23,6 +23,10 @@ class VisualEvidenceRef:
     crop_status: str | None = None
     crop_width: int | None = None
     crop_height: int | None = None
+    selection_reason: str | None = None
+    confidence: float | None = None
+    source_block_id: str | None = None
+    crop_kind: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)

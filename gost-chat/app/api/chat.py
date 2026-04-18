@@ -2,7 +2,20 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from app.schemas.chat import ChatRequest, ChatResponse, HealthResponse, ModelResponse
+from app.orchestration.chat_orchestrator import EmptyChatMessageError
+from app.orchestration.chat_store import ChatSessionNotFoundError
+from app.schemas.chat import (
+    ChatMessagePayload,
+    ChatRequest,
+    ChatResponse,
+    ChatSessionDetailResponse,
+    ChatSessionResponse,
+    CreateChatSessionRequest,
+    HealthResponse,
+    ModelResponse,
+    SessionChatMessageRequest,
+    SessionChatMessageResponse,
+)
 from app.services.chat_service import ChatService, EmptyMessageError
 from app.services.llm_service import LlmServiceError
 
@@ -30,6 +43,56 @@ async def models(request: Request) -> ModelResponse:
         model=chat_service.model,
         available=available,
         ollama_available=available,
+    )
+
+
+@router.post("/chat/sessions", response_model=ChatSessionResponse)
+async def create_chat_session(payload: CreateChatSessionRequest, request: Request) -> ChatSessionResponse:
+    session = request.app.state.chat_store.create_session(title=payload.title or "New chat")
+    return ChatSessionResponse(
+        session_id=session.id,
+        title=session.title,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+    )
+
+
+@router.get("/chat/sessions/{session_id}", response_model=ChatSessionDetailResponse)
+async def get_chat_session(session_id: str, request: Request) -> ChatSessionDetailResponse:
+    try:
+        session = request.app.state.chat_store.get_session(session_id)
+        messages = request.app.state.chat_store.list_messages(session_id)
+    except ChatSessionNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found.") from exc
+    return ChatSessionDetailResponse(
+        session_id=session.id,
+        title=session.title,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+        messages=[ChatMessagePayload(**message.__dict__) for message in messages],
+    )
+
+
+@router.post("/chat/sessions/{session_id}/messages", response_model=SessionChatMessageResponse)
+async def send_session_message(
+    session_id: str,
+    payload: SessionChatMessageRequest,
+    request: Request,
+) -> SessionChatMessageResponse:
+    try:
+        response = await request.app.state.chat_orchestrator.send_message(session_id, payload.message, top_k=payload.top_k)
+    except ChatSessionNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found.") from exc
+    except EmptyChatMessageError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return SessionChatMessageResponse(
+        session_id=response.session_id,
+        message_id=response.message_id,
+        answer=response.answer,
+        model=response.model,
+        citations=list(getattr(response, "citations", []) or []),
+        attachments=list(getattr(response, "attachments", []) or []),
+        tool_events=list(getattr(response, "tool_events", []) or []),
     )
 
 

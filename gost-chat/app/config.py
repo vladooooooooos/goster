@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     visual_vision_enabled: bool = True
     visual_page_render_dpi: int = 120
     visual_candidate_limit: int = 8
+    chat_store_path: Path = Path("data/chat_sessions.json")
+    chat_history_limit: int = 12
+    agent_max_tool_loops: int = 3
 
     model_config = SettingsConfigDict(
         env_file=".env",

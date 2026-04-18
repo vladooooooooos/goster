@@ -1,7 +1,7 @@
 import base64
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +10,9 @@ from app.services.llm_service import LlmService
 from app.services.query_planner import QueryPlan, QueryPlanner
 from app.services.retrieval_pipeline import RetrievalPipeline
 from app.services.visual_crop_service import GeneratedCrop
+from app.services.visual_backfill_service import VisualBackfillResult, VisualBackfillService
 from app.services.visual_evidence import (
+    ContextVisualHints,
     VisualEvidenceDecision,
     VisualEvidenceRef,
     guard_visual_decision,
@@ -155,6 +157,7 @@ class RagService:
         visual_max_crops_per_answer: int = 1,
         visual_vision_enabled: bool = True,
         query_planner: QueryPlanner | None = None,
+        visual_backfill_service: VisualBackfillService | None = None,
     ) -> None:
         self._llm_service = llm_service
         self._retrieval_pipeline = retrieval_pipeline
@@ -164,6 +167,7 @@ class RagService:
         self._visual_max_crops_per_answer = visual_max_crops_per_answer
         self._visual_vision_enabled = visual_vision_enabled
         self._query_planner = query_planner or QueryPlanner()
+        self._visual_backfill_service = visual_backfill_service
 
     async def answer_question(self, query: str, top_k: int = 5) -> RagAnswer:
         retrieval_result = self._retrieval_pipeline.retrieve(query, top_k=top_k)
@@ -187,11 +191,13 @@ class RagService:
             query_plan=query_plan,
         )
         if not built_context.selected:
+            backfill_result = VisualBackfillResult.empty("no_selected_context")
             retrieval_info = _with_context_info(
                 retrieval_result.info,
                 built_context,
                 VisualEvidenceDecision.text_only("No text context was selected."),
                 [],
+                backfill_result=backfill_result,
             )
             return RagAnswer(
                 query=retrieval_result.query,
@@ -204,6 +210,9 @@ class RagService:
                 visual_evidence=[],
             )
 
+        backfill_result = self._backfill_visual_evidence(built_context)
+        built_context = _with_backfilled_visual_refs(built_context, backfill_result.refs)
+
         visual_decision = await self._decide_visual_evidence(built_context)
         visual_evidence = self._generate_visual_evidence(built_context, visual_decision)
         visual_inspection = await self._inspect_visual_evidence(built_context, visual_evidence)
@@ -212,6 +221,36 @@ class RagService:
             len(visual_evidence),
             [visual.block_id for visual in visual_evidence],
         )
+        prompt = _build_grounded_prompt(built_context, visual_evidence, visual_inspection)
+        answer = await self._llm_service.chat(
+            [
+                {"role": "system", "content": RAG_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ]
+        )
+        if not visual_evidence and self._visual_backfill_service is not None:
+            answer_backfill = self._visual_backfill_service.backfill_from_answer(built_context, answer)
+            backfill_result = _merge_backfill_results(backfill_result, answer_backfill)
+            if answer_backfill.refs:
+                logger.info(
+                    "Answer-driven visual backfill found %s candidate(s): %s.",
+                    len(answer_backfill.refs),
+                    [ref.block_id for ref in answer_backfill.refs],
+                )
+                built_context = _with_backfilled_visual_refs(built_context, answer_backfill.refs)
+                visual_decision = _visual_decision_for_visual_query(
+                    [*built_context.visual_hints.selected, *built_context.visual_hints.candidates],
+                    self._visual_max_crops_per_answer,
+                    built_context.query_plan,
+                )
+                visual_evidence = self._generate_visual_evidence(built_context, visual_decision)
+                visual_inspection = await self._inspect_visual_evidence(built_context, visual_evidence)
+                logger.info(
+                    "Visual backfill generated %s attachment(s): %s.",
+                    len(visual_evidence),
+                    [visual.block_id for visual in visual_evidence],
+                )
+
         visual_by_block_id = {visual.block_id: visual for visual in visual_evidence}
         retrieval_info = _with_context_info(
             retrieval_result.info,
@@ -219,13 +258,7 @@ class RagService:
             visual_decision,
             visual_evidence,
             visual_inspection,
-        )
-        prompt = _build_grounded_prompt(built_context, visual_evidence, visual_inspection)
-        answer = await self._llm_service.chat(
-            [
-                {"role": "system", "content": RAG_SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ]
+            backfill_result=backfill_result,
         )
 
         citations = [_citation_from_evidence(evidence, visual_by_block_id) for evidence in built_context.selected]
@@ -243,6 +276,18 @@ class RagService:
             retrieval_info=retrieval_info,
             visual_evidence=visual_evidence,
         )
+
+    def _backfill_visual_evidence(self, built_context: BuiltContext) -> VisualBackfillResult:
+        if self._visual_backfill_service is None:
+            return VisualBackfillResult.empty("visual_backfill_disabled")
+        result = self._visual_backfill_service.backfill(built_context)
+        if result.refs:
+            logger.info(
+                "Visual backfill generated %s attachment target(s): %s.",
+                len(result.refs),
+                [ref.block_id for ref in result.refs],
+            )
+        return result
 
     async def _decide_visual_evidence(self, built_context: BuiltContext) -> VisualEvidenceDecision:
         refs = [*built_context.visual_hints.selected, *built_context.visual_hints.candidates]
@@ -418,6 +463,8 @@ def _is_explicit_visual_request(query: str) -> bool:
 def _should_promote_visual_decision(built_context: BuiltContext) -> bool:
     if _is_explicit_visual_request(built_context.query):
         return True
+    if any(ref.selection_reason for ref in [*built_context.visual_hints.selected, *built_context.visual_hints.candidates]):
+        return True
     return bool(built_context.query_plan and built_context.query_plan.needs_visual)
 
 
@@ -525,10 +572,10 @@ def _rag_visual_from_crop(ref: VisualEvidenceRef, crop: GeneratedCrop) -> RagVis
         height=crop.height,
         format=crop.format,
         dpi=crop.dpi,
-        selection_reason="Selected from retrieved visual evidence.",
+        selection_reason=ref.selection_reason or "Selected from retrieved visual evidence.",
         confidence=None,
-        source_block_id=ref.block_id,
-        crop_kind="retrieved_bbox",
+        source_block_id=ref.source_block_id or ref.block_id,
+        crop_kind=ref.crop_kind or "retrieved_bbox",
     )
 
 
@@ -538,6 +585,7 @@ def _with_context_info(
     visual_decision: VisualEvidenceDecision,
     visual_evidence: list[RagVisualEvidence],
     visual_inspection: dict[str, Any] | None = None,
+    backfill_result: VisualBackfillResult | None = None,
 ) -> dict[str, Any]:
     merged = dict(info or {})
     merged["context"] = built_context.stats.to_dict()
@@ -560,7 +608,58 @@ def _with_context_info(
             for visual in visual_evidence
         ],
     }
+    backfill_payload = (backfill_result or VisualBackfillResult.empty("not_requested")).to_dict()
+    merged["visual"].update(backfill_payload)
     return merged
+
+
+def _with_backfilled_visual_refs(built_context: BuiltContext, refs: list[VisualEvidenceRef]) -> BuiltContext:
+    if not refs:
+        return built_context
+    existing_ids = {
+        ref.block_id
+        for ref in [*built_context.visual_hints.selected, *built_context.visual_hints.candidates]
+    }
+    new_refs = [
+        replace(
+            ref,
+            selection_reason=ref.selection_reason or "Matched graphic reference in selected evidence.",
+            crop_kind=ref.crop_kind or "backfilled_bbox",
+        )
+        for ref in refs
+        if ref.block_id not in existing_ids
+    ]
+    if not new_refs:
+        return built_context
+    return replace(
+        built_context,
+        visual_hints=ContextVisualHints(
+            selected=built_context.visual_hints.selected,
+            candidates=[*new_refs, *built_context.visual_hints.candidates],
+        ),
+    )
+
+
+def _merge_backfill_results(
+    first: VisualBackfillResult,
+    second: VisualBackfillResult,
+) -> VisualBackfillResult:
+    refs_by_id = {ref.block_id: ref for ref in [*first.refs, *second.refs]}
+    reference_mentions = list(dict.fromkeys([*first.reference_mentions, *second.reference_mentions]))
+    missing_references = [
+        value
+        for value in dict.fromkeys([*first.missing_references, *second.missing_references])
+        if value not in reference_mentions
+    ]
+    fallback_reason = None if refs_by_id else second.fallback_reason or first.fallback_reason
+    return VisualBackfillResult(
+        refs=list(refs_by_id.values()),
+        reference_mentions=reference_mentions,
+        attempted=first.attempted or second.attempted,
+        backfilled_block_ids=list(refs_by_id),
+        missing_references=missing_references,
+        fallback_reason=fallback_reason,
+    )
 
 
 def _image_data_url(path: Path, image_format: str) -> str | None:

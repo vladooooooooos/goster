@@ -12,6 +12,11 @@ from app.api.ask import router as ask_router
 from app.api.chat import router as chat_router
 from app.api.search import router as search_router
 from app.config import get_settings
+from app.orchestration.chat_orchestrator import ChatOrchestrator
+from app.orchestration.chat_store import ChatStore
+from app.orchestration.tool_executor import ToolExecutor
+from app.orchestration.tool_registry import ToolRegistry
+from app.orchestration.tools import DocumentRagTool, VisualAssetTool, VisualCropTool
 from app.services.chat_service import ChatService
 from app.services.context_builder import ContextBuilder, ContextBuilderSettings
 from app.services.local_embedding_service import LocalEmbeddingService, LocalEmbeddingSettings
@@ -21,8 +26,10 @@ from app.services.rag_service import RagService
 from app.services.reranker_service import LocalRerankerService, RerankerSettings
 from app.services.retrieval_pipeline import RetrievalPipeline
 from app.services.retriever import Retriever
+from app.services.visual_backfill_service import VisualBackfillService
 from app.services.visual_crop_service import VisualCropService, VisualCropSettings
 
+APP_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -93,6 +100,10 @@ app.state.visual_crop_service = VisualCropService(
         dpi=settings.visual_crop_dpi,
     )
 )
+app.state.visual_backfill_service = VisualBackfillService(
+    lookup=app.state.qdrant_retriever,
+    candidate_limit=settings.visual_candidate_limit,
+)
 app.state.rag_service = RagService(
     llm_service=app.state.llm_service,
     retrieval_pipeline=app.state.retrieval_pipeline,
@@ -101,12 +112,25 @@ app.state.rag_service = RagService(
     visual_decision_enabled=settings.visual_enable_decision,
     visual_max_crops_per_answer=settings.visual_max_crops_per_answer,
     visual_vision_enabled=settings.visual_vision_enabled,
+    visual_backfill_service=app.state.visual_backfill_service,
+)
+app.state.chat_store = ChatStore(settings.chat_store_path)
+app.state.tool_registry = ToolRegistry()
+app.state.tool_registry.register(DocumentRagTool(app.state.rag_service))
+app.state.tool_registry.register(VisualCropTool(app.state.visual_crop_service))
+app.state.tool_registry.register(VisualAssetTool())
+app.state.tool_executor = ToolExecutor(app.state.tool_registry)
+app.state.chat_orchestrator = ChatOrchestrator(
+    store=app.state.chat_store,
+    executor=app.state.tool_executor,
+    model=settings.llm_model,
+    history_limit=settings.chat_history_limit,
 )
 
 settings.visual_crops_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/crops", StaticFiles(directory=settings.visual_crops_dir), name="crops")
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-templates = Jinja2Templates(directory="app/templates")
+app.mount("/static", StaticFiles(directory=APP_ROOT / "static"), name="static")
+templates = Jinja2Templates(directory=APP_ROOT / "templates")
 
 
 @app.middleware("http")

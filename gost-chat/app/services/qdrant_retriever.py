@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
+from qdrant_client import models
+
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -17,7 +19,7 @@ from shared.vector_store import (  # noqa: E402
 )
 
 from app.services.local_embedding_service import LocalEmbeddingService
-from app.services.retrieval_types import RetrievedBlock
+from app.services.retrieval_types import RetrievedBlock, RerankedBlock, make_reranked_block
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +80,51 @@ class QdrantRetriever:
         """Search Qdrant with an already embedded query vector."""
         points = self.vector_store.search(vector=vector, top_k=top_k)
         return [block for point in points if (block := retrieved_block_from_point(point))]
+
+    def find_visual_blocks(self, document_id: str, limit: int) -> list[RerankedBlock]:
+        """Return visual-capable blocks for one indexed document."""
+        normalized_document_id = document_id.strip()
+        if not normalized_document_id or limit <= 0:
+            return []
+
+        scroll_filter = models.Filter(
+            must=[
+                models.FieldCondition(key="document_id", match=models.MatchValue(value=normalized_document_id)),
+                models.FieldCondition(key="has_visual_evidence", match=models.MatchValue(value=True)),
+                models.FieldCondition(
+                    key="block_type",
+                    match=models.MatchAny(any=["figure", "table", "formula_with_context"]),
+                ),
+            ]
+        )
+        try:
+            scroll_operation = getattr(self.vector_store, "scroll", None)
+            if scroll_operation is None:
+                scroll_operation = self.client.scroll
+            points, _ = self.vector_store.call_qdrant(
+                scroll_operation,
+                collection_name=self.collection_name,
+                scroll_filter=scroll_filter,
+                limit=max(1, limit),
+                with_payload=True,
+                with_vectors=False,
+            )
+        except Exception as exc:
+            logger.info("Qdrant visual backfill lookup failed for document_id=%s: %s", document_id, exc)
+            return []
+
+        blocks = []
+        for point in points:
+            block = retrieved_block_from_point(
+                VectorSearchResult(
+                    id=getattr(point, "id", None),
+                    score=float(getattr(point, "score", 0.0) or 0.0),
+                    payload=dict(getattr(point, "payload", {}) or {}),
+                )
+            )
+            if block and block.payload.get("has_visual_evidence") is True:
+                blocks.append(make_reranked_block(block, None))
+        return blocks
 
     def close(self) -> None:
         if self._vector_store is not None:

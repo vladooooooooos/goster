@@ -45,6 +45,7 @@ function createSession() {
   const now = new Date().toISOString();
   return {
     id: createId("session"),
+    backendSessionId: null,
     title: UNTITLED_SESSION_TITLE,
     createdAt: now,
     updatedAt: now,
@@ -95,6 +96,9 @@ function isValidSession(session) {
     session &&
     typeof session === "object" &&
     typeof session.id === "string" &&
+    (session.backendSessionId === null ||
+      session.backendSessionId === undefined ||
+      typeof session.backendSessionId === "string") &&
     typeof session.title === "string" &&
     typeof session.createdAt === "string" &&
     typeof session.updatedAt === "string" &&
@@ -116,6 +120,11 @@ function isValidMessage(message) {
 
 function normalizeStore(store) {
   const sessions = store.sessions.length ? store.sessions : [createSession()];
+  sessions.forEach((session) => {
+    if (session.backendSessionId === undefined) {
+      session.backendSessionId = null;
+    }
+  });
   const activeExists = sessions.some((session) => session.id === store.activeSessionId);
   const activeSessionId = activeExists ? store.activeSessionId : sessions[0].id;
   return { activeSessionId, sessions };
@@ -518,24 +527,56 @@ function scrollMessagesToBottom() {
   messages.scrollTop = messages.scrollHeight;
 }
 
-async function askIndexedDocuments(query) {
-  const startedAt = performance.now();
-  const response = await fetch("/ask", {
+async function ensureBackendSession(session) {
+  if (session.backendSessionId) {
+    return session.backendSessionId;
+  }
+
+  const response = await fetch("/chat/sessions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ query, top_k: DEFAULT_TOP_K }),
+    body: JSON.stringify({ title: session.title || UNTITLED_SESSION_TITLE }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.detail || "Could not create chat session.");
+  }
+  session.backendSessionId = data.session_id;
+  saveChatStore();
+  return session.backendSessionId;
+}
+
+async function sendSessionMessage(session, message) {
+  const startedAt = performance.now();
+  const backendSessionId = await ensureBackendSession(session);
+  const response = await fetch(`/chat/sessions/${encodeURIComponent(backendSessionId)}/messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ message, top_k: DEFAULT_TOP_K }),
   });
 
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.detail || "Не удалось ответить по проиндексированным документам.");
+    throw new Error(data.detail || "Could not answer from the chat session.");
   }
+
+  const visualEvidence = Array.isArray(data.attachments)
+    ? data.attachments.map((item) => ({
+        ...item,
+        crop_url: item.url,
+        crop_path: item.path,
+        page_number: item.page_number,
+      }))
+    : [];
 
   return {
     ...data,
+    visual_evidence: visualEvidence,
     elapsedSeconds: (performance.now() - startedAt) / 1000,
   };
 }
@@ -577,7 +618,7 @@ form.addEventListener("submit", async (event) => {
   setLoading(true);
 
   try {
-    const result = await askIndexedDocuments(message);
+    const result = await sendSessionMessage(session, message);
     replaceAssistantMessage(loadingMessage, result, result.elapsedSeconds);
 
     const assistantMessage = createStoredMessage("assistant", result.answer, {
