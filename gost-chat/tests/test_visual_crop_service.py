@@ -137,10 +137,66 @@ class VisualCropServiceTest(unittest.TestCase):
             self.assertIsNotNone(crop)
             self.assertTrue(Path(crop.file_path).exists())
 
+    def test_expands_small_figure_bbox_on_scanned_pages(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            pdf_path = root / "source.pdf"
+            self._write_scanned_like_pdf(pdf_path)
+            metadata_dir = root / "metadata"
+            metadata_dir.mkdir()
+            (metadata_dir / "documents.json").write_text(
+                json.dumps(
+                    {
+                        "documents": [
+                            {
+                                "document_id": "doc-1",
+                                "source_path": str(pdf_path),
+                                "file_name": "source.pdf",
+                                "indexed_at": "now",
+                                "stored_points": 1,
+                                "file_size": pdf_path.stat().st_size,
+                                "modified_at": "now",
+                                "source_fingerprint": self._sha256(pdf_path),
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            service = VisualCropService(
+                VisualCropSettings(indexer_output_dir=root, crops_dir=root / "crops", dpi=72)
+            )
+            ref = VisualEvidenceRef(
+                block_id="block-1",
+                document_id="doc-1",
+                page_number=1,
+                bbox=(210.0, 260.0, 478.0, 330.0),
+                block_type="figure",
+                label="Figure 1",
+                source_file="source.pdf",
+                text_preview="Figure context",
+            )
+
+            crop = service.get_or_create_crop(ref)
+
+            self.assertIsNotNone(crop)
+            self.assertGreater(crop.width, 450)
+            self.assertGreater(crop.height, 200)
+
     def _write_pdf(self, path: Path) -> None:
         document = pymupdf.open()
         page = document.new_page(width=200, height=120)
         page.insert_text((20, 40), "Visual crop test")
+        document.save(path)
+        document.close()
+
+    def _write_scanned_like_pdf(self, path: Path) -> None:
+        document = pymupdf.open()
+        page = document.new_page(width=687, height=971)
+        pixmap = pymupdf.Pixmap(pymupdf.csGRAY, pymupdf.IRect(0, 0, 687, 971), 0)
+        pixmap.clear_with(255)
+        page.insert_image(page.rect, pixmap=pixmap)
+        page.insert_text((230, 320), "Figure 1 - Sink layout")
         document.save(path)
         document.close()
 

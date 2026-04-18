@@ -14,6 +14,7 @@ from app.services.visual_evidence import VisualEvidenceRef
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_CROP_CACHE_VERSION = "v2"
 
 
 @dataclass(frozen=True)
@@ -149,7 +150,7 @@ class VisualCropService:
 
     def _crop_path(self, ref: VisualEvidenceRef) -> Path:
         digest = hashlib.sha1(
-            f"{ref.block_id}|{ref.page_number}|{ref.bbox}|{self.settings.dpi}".encode("utf-8")
+            f"{_CROP_CACHE_VERSION}|{ref.block_id}|{ref.page_number}|{ref.bbox}|{self.settings.dpi}".encode("utf-8")
         ).hexdigest()[:12]
         safe_block_id = "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in ref.block_id)
         filename = f"page-{ref.page_number}-{safe_block_id}-{digest}.{self.settings.image_format}"
@@ -162,7 +163,7 @@ class VisualCropService:
                 if page_index < 0 or page_index >= len(document):
                     return False
                 page = document[page_index]
-                clip = pymupdf.Rect(*ref.bbox) & page.rect
+                clip = self._crop_clip(page, ref)
                 if clip.is_empty or clip.width <= 0 or clip.height <= 0:
                     return False
                 pixmap = page.get_pixmap(dpi=self.settings.dpi, clip=clip, alpha=False)
@@ -196,6 +197,28 @@ class VisualCropService:
         x0, y0, x1, y1 = bbox
         return x1 > x0 and y1 > y0 and x0 >= 0 and y0 >= 0
 
+    def _crop_clip(self, page: pymupdf.Page, ref: VisualEvidenceRef) -> pymupdf.Rect:
+        clip = pymupdf.Rect(*ref.bbox) & page.rect
+        if not _should_expand_figure_clip(page, ref, clip):
+            return clip
+
+        margin_x = min(72.0, page.rect.width * 0.12)
+        top_margin = min(96.0, page.rect.height * 0.12)
+        bottom_padding = min(24.0, page.rect.height * 0.03)
+        expanded = pymupdf.Rect(
+            margin_x,
+            max(top_margin, clip.y0 - min(260.0, page.rect.height * 0.32)),
+            page.rect.width - margin_x,
+            min(page.rect.height - top_margin * 0.25, clip.y1 + bottom_padding),
+        )
+        logger.info(
+            "Expanded scanned figure crop for block_id=%s from bbox=%s to clip=%s.",
+            ref.block_id,
+            tuple(round(value, 2) for value in ref.bbox),
+            (round(expanded.x0, 2), round(expanded.y0, 2), round(expanded.x1, 2), round(expanded.y1, 2)),
+        )
+        return expanded & page.rect
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -207,3 +230,35 @@ def _sha256(path: Path) -> str:
 
 def _int_or_none(value: Any) -> int | None:
     return value if isinstance(value, int) else None
+
+
+def _should_expand_figure_clip(page: pymupdf.Page, ref: VisualEvidenceRef, clip: pymupdf.Rect) -> bool:
+    if ref.block_type != "figure":
+        return False
+    if not _has_page_sized_image(page):
+        return False
+    page_area = page.rect.width * page.rect.height
+    clip_area = clip.width * clip.height
+    if page_area <= 0:
+        return False
+    return clip.height < 140.0 or clip_area / page_area < 0.08
+
+
+def _has_page_sized_image(page: pymupdf.Page) -> bool:
+    try:
+        blocks = page.get_text("dict").get("blocks", [])
+    except (RuntimeError, ValueError):
+        return False
+    page_area = page.rect.width * page.rect.height
+    if page_area <= 0:
+        return False
+    for block in blocks:
+        if not isinstance(block, dict) or block.get("type") != 1:
+            continue
+        bbox = block.get("bbox")
+        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+            continue
+        rect = pymupdf.Rect(*bbox) & page.rect
+        if rect.width * rect.height / page_area >= 0.65:
+            return True
+    return False
