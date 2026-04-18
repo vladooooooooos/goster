@@ -85,9 +85,70 @@ class VisualCropServiceTest(unittest.TestCase):
 
             self.assertIsNone(service.get_or_create_crop(ref))
 
+    def test_finds_source_pdf_by_fingerprint_when_registered_path_is_stale(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_root = root / "docs"
+            source_root.mkdir()
+            pdf_path = source_root / "source.pdf"
+            self._write_pdf(pdf_path)
+            metadata_dir = root / "metadata"
+            metadata_dir.mkdir()
+            (metadata_dir / "documents.json").write_text(
+                json.dumps(
+                    {
+                        "documents": [
+                            {
+                                "document_id": "doc-1",
+                                "source_path": str(root / "missing" / "source.pdf"),
+                                "file_name": "source.pdf",
+                                "indexed_at": "now",
+                                "stored_points": 1,
+                                "file_size": pdf_path.stat().st_size,
+                                "modified_at": "now",
+                                "source_fingerprint": self._sha256(pdf_path),
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            service = VisualCropService(
+                VisualCropSettings(
+                    indexer_output_dir=root,
+                    crops_dir=root / "crops",
+                    dpi=120,
+                    source_roots=(source_root,),
+                )
+            )
+            ref = VisualEvidenceRef(
+                block_id="block-1",
+                document_id="doc-1",
+                page_number=1,
+                bbox=(10.0, 10.0, 120.0, 80.0),
+                block_type="figure",
+                label="Figure 1",
+                source_file="source.pdf",
+                text_preview="Figure context",
+            )
+
+            crop = service.get_or_create_crop(ref)
+
+            self.assertIsNotNone(crop)
+            self.assertTrue(Path(crop.file_path).exists())
+
     def _write_pdf(self, path: Path) -> None:
         document = pymupdf.open()
         page = document.new_page(width=200, height=120)
         page.insert_text((20, 40), "Visual crop test")
         document.save(path)
         document.close()
+
+    def _sha256(self, path: Path) -> str:
+        import hashlib
+
+        digest = hashlib.sha256()
+        with path.open("rb") as file:
+            for chunk in iter(lambda: file.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
