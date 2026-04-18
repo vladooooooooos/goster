@@ -13,7 +13,7 @@ from app.api.chat import router as chat_router
 from app.api.search import router as search_router
 from app.config import get_settings
 from app.services.chat_service import ChatService
-from app.services.context_builder import ContextBuilder
+from app.services.context_builder import ContextBuilder, ContextBuilderSettings
 from app.services.local_embedding_service import LocalEmbeddingService, LocalEmbeddingSettings
 from app.services.llm_service import create_llm_service
 from app.services.qdrant_retriever import QdrantRetriever
@@ -76,7 +76,15 @@ app.state.retrieval_pipeline = RetrievalPipeline(
     qdrant_retriever=app.state.qdrant_retriever,
     reranker=app.state.reranker,
 )
-app.state.context_builder = ContextBuilder()
+app.state.context_builder = ContextBuilder(
+    ContextBuilderSettings(
+        min_blocks=settings.context_min_blocks,
+        soft_target_blocks=settings.context_soft_target_blocks,
+        max_blocks=settings.context_max_blocks,
+        max_context_chars=settings.context_max_chars,
+        adaptive_score_threshold=settings.context_adaptive_score_threshold,
+    )
+)
 app.state.rag_service = RagService(
     llm_service=app.state.llm_service,
     retrieval_pipeline=app.state.retrieval_pipeline,

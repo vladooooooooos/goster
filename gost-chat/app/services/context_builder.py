@@ -7,11 +7,14 @@ from app.services.retrieval_types import RerankedBlock
 
 @dataclass(frozen=True)
 class ContextBuilderSettings:
-    max_blocks: int = 5
-    max_context_chars: int = 12000
+    min_blocks: int = 2
+    soft_target_blocks: int = 5
+    max_blocks: int = 10
+    max_context_chars: int = 18000
     max_chars_per_block: int = 4000
     evidence_preview_chars: int = 320
     enable_near_duplicate_filter: bool = False
+    adaptive_score_threshold: float = 0.12
 
 
 @dataclass(frozen=True)

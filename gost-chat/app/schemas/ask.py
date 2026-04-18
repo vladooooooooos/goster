@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 class AskRequest(BaseModel):
     query: str = Field(..., min_length=1, description="Question to answer from indexed documents.")
-    top_k: int = Field(5, ge=1, le=20, description="Maximum number of source chunks to retrieve.")
+    top_k: int = Field(12, ge=1, le=50, description="Maximum number of source chunks to retrieve.")
 
 
 class AskCitation(BaseModel):
