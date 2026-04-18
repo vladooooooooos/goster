@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from typing import Any
 
 from app.services.retrieval_types import RerankedBlock
 
@@ -36,8 +37,12 @@ class ContextBuildStats:
     truncated_count: int
     total_chars_included: int
     max_context_chars: int
+    min_blocks: int
+    soft_target_blocks: int
+    max_blocks: int
+    stop_reason: str
 
-    def to_dict(self) -> dict[str, int]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -61,11 +66,27 @@ class ContextBuilder:
         dropped_budget_count = 0
         truncated_count = 0
         total_chars_included = 0
+        best_score: float | None = None
+        stop_reason = "exhausted"
 
         for block in ranked_blocks:
             if len(selected) >= max(1, self.settings.max_blocks):
                 dropped_budget_count += 1
+                stop_reason = "max_blocks"
                 continue
+
+            score = block.rerank_score if block.rerank_score is not None else block.retrieval_score
+            if best_score is None:
+                best_score = score
+            if (
+                selected
+                and len(selected) >= self.settings.min_blocks
+                and len(selected) >= self.settings.soft_target_blocks
+                and best_score > 0
+                and score < best_score * (1 - self.settings.adaptive_score_threshold)
+            ):
+                stop_reason = "score_drop"
+                break
 
             block_id = block.block_id.strip()
             if block_id and block_id in seen_block_ids:
@@ -96,6 +117,7 @@ class ContextBuilder:
             projected_chars = total_chars_included + separator_chars + piece_chars
             if selected and projected_chars > self.settings.max_context_chars:
                 dropped_budget_count += 1
+                stop_reason = "budget"
                 continue
 
             evidence = ContextEvidence(
@@ -128,6 +150,10 @@ class ContextBuilder:
             truncated_count=truncated_count,
             total_chars_included=len(formatted_context),
             max_context_chars=self.settings.max_context_chars,
+            min_blocks=self.settings.min_blocks,
+            soft_target_blocks=self.settings.soft_target_blocks,
+            max_blocks=self.settings.max_blocks,
+            stop_reason=stop_reason,
         )
         return BuiltContext(
             query=query,

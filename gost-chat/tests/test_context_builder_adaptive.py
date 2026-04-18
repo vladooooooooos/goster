@@ -1,0 +1,100 @@
+import unittest
+
+from app.services.context_builder import ContextBuilder, ContextBuilderSettings
+from app.services.retrieval_types import RerankedBlock
+
+
+def block(
+    block_id: str,
+    text: str,
+    rerank_score: float | None,
+    retrieval_score: float = 0.5,
+    payload: dict | None = None,
+) -> RerankedBlock:
+    return RerankedBlock(
+        block_id=block_id,
+        text=text,
+        retrieval_text=text,
+        source_file="source.pdf",
+        page=1,
+        section_path=[],
+        retrieval_score=retrieval_score,
+        rerank_score=rerank_score,
+        payload=payload or {},
+        document_id="doc-1",
+        page_start=1,
+        page_end=1,
+        block_type="paragraph",
+        label=None,
+    )
+
+
+class AdaptiveContextBuilderTest(unittest.TestCase):
+    def test_selects_more_than_soft_target_until_score_drop(self):
+        builder = ContextBuilder(
+            ContextBuilderSettings(
+                min_blocks=2,
+                soft_target_blocks=3,
+                max_blocks=10,
+                adaptive_score_threshold=0.20,
+                max_context_chars=20000,
+            )
+        )
+        ranked = [
+            block("b1", "first relevant block", 1.00),
+            block("b2", "second relevant block", 0.95),
+            block("b3", "third relevant block", 0.90),
+            block("b4", "fourth still close block", 0.83),
+            block("b5", "fifth dropped block", 0.50),
+        ]
+
+        built = builder.build("query", ranked)
+
+        self.assertEqual([item.block.block_id for item in built.selected], ["b1", "b2", "b3", "b4"])
+        self.assertEqual(built.stats.stop_reason, "score_drop")
+        self.assertEqual(built.stats.input_count, 5)
+        self.assertEqual(built.stats.selected_count, 4)
+
+    def test_keeps_minimum_blocks_even_when_second_score_drops(self):
+        builder = ContextBuilder(
+            ContextBuilderSettings(
+                min_blocks=2,
+                soft_target_blocks=2,
+                max_blocks=5,
+                adaptive_score_threshold=0.10,
+                max_context_chars=20000,
+            )
+        )
+        ranked = [
+            block("b1", "first relevant block", 1.00),
+            block("b2", "second low but required block", 0.20),
+            block("b3", "third low block", 0.19),
+        ]
+
+        built = builder.build("query", ranked)
+
+        self.assertEqual([item.block.block_id for item in built.selected], ["b1", "b2"])
+        self.assertEqual(built.stats.stop_reason, "score_drop")
+
+    def test_tracks_duplicates_and_budget(self):
+        builder = ContextBuilder(
+            ContextBuilderSettings(
+                min_blocks=1,
+                soft_target_blocks=5,
+                max_blocks=5,
+                max_context_chars=130,
+                max_chars_per_block=200,
+            )
+        )
+        ranked = [
+            block("b1", "same text", 1.0),
+            block("b1", "same text again by id", 0.9),
+            block("b2", "same text", 0.8),
+            block("b3", "large unique text " * 20, 0.7),
+        ]
+
+        built = builder.build("query", ranked)
+
+        self.assertEqual(len(built.selected), 1)
+        self.assertGreaterEqual(built.stats.dropped_duplicate_count, 2)
+        self.assertGreaterEqual(built.stats.dropped_budget_count, 1)
