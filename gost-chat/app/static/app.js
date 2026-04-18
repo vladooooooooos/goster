@@ -359,6 +359,10 @@ function replaceAssistantMessage(article, data, elapsedSeconds) {
 
   bodyNode.append(createCitationSummary(data));
 
+  if (Array.isArray(data.visual_evidence) && data.visual_evidence.length) {
+    bodyNode.append(createVisualEvidenceList(data.visual_evidence));
+  }
+
   if (Array.isArray(data.citations) && data.citations.length) {
     bodyNode.append(createCitationList(data.citations));
   }
@@ -405,11 +409,48 @@ function createCitationList(citations) {
     preview.textContent = citation.evidence_preview;
 
     item.append(meta, preview);
+    if (citation.visual_evidence) {
+      item.append(createVisualEvidenceList([citation.visual_evidence]));
+    }
     list.append(item);
   });
 
   details.append(list);
   return details;
+}
+
+function createVisualEvidenceList(items) {
+  const visuals = Array.isArray(items) ? items.filter((item) => item && item.crop_url) : [];
+  const wrapper = document.createElement("div");
+  wrapper.className = "visual-evidence-list";
+
+  visuals.forEach((visual) => {
+    const figure = document.createElement("figure");
+    figure.className = "visual-evidence";
+
+    const image = document.createElement("img");
+    image.src = visual.crop_url;
+    image.alt = formatVisualAltText(visual);
+    image.loading = "lazy";
+
+    const caption = document.createElement("figcaption");
+    caption.textContent = formatVisualCaption(visual);
+
+    figure.append(image, caption);
+    wrapper.append(figure);
+  });
+
+  return wrapper;
+}
+
+function formatVisualAltText(visual) {
+  const label = visual.label || visual.block_type || "visual evidence";
+  return `${label} from ${visual.source_file}, page ${visual.page_number}`;
+}
+
+function formatVisualCaption(visual) {
+  const label = visual.label ? `${visual.label} - ` : "";
+  return `${label}${visual.source_file}, page ${visual.page_number}`;
 }
 
 function setLoading(isLoading) {

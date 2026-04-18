@@ -231,6 +231,31 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.visual-evidence-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.visual-evidence {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.visual-evidence img {
+  max-width: 100%;
+  border: 1px solid #2d5788;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.visual-evidence figcaption {
+  color: #b7c9df;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
 .error {
   margin: 0;
   border: 1px solid #a55c66;
