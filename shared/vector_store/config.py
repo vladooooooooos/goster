@@ -17,6 +17,11 @@ class QdrantVectorStoreConfig:
     https: bool = False
     api_key: str | None = None
     timeout_seconds: float = 5.0
+    quantization_enabled: bool = True
+    quantization_mode: str = "scalar"
+    vectors_on_disk: bool = True
+    quantized_vectors_always_ram: bool = True
+    upsert_batch_size: int = 64
 
     @property
     def endpoint(self) -> str:

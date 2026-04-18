@@ -159,9 +159,10 @@ Source PDFs не входят в clear semantics. Indexator удаляет то�
 .\.venv\Scripts\Activate.ps1
 $env:PYTHONPATH="C:\goster\indexator"
 python -m unittest discover -s indexator\tests
-docker compose up -d qdrant
 python scripts\vector_store_smoke.py
 ```
+
+`launch_indexator.cmd` starts the local Qdrant server automatically through Docker Compose when it is not already reachable. To start or stop Qdrant manually, double-click `start_qdrant_server.cmd` or `stop_qdrant_server.cmd` in the repository root.
 
 ## Следующие MVP-шаги
 

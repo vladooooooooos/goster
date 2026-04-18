@@ -5,8 +5,14 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
+
+from shared.qdrant_server import QdrantServerConfig, ensure_qdrant_server
 
 from app.ui.main_window import MainWindow
 from app.utils.config import load_config
@@ -24,6 +30,7 @@ def main() -> int:
     """Start the Indexator desktop application."""
     app_root = Path(__file__).resolve().parents[1]
     config = load_config(app_root / "config.json")
+    ensure_qdrant_server(QdrantServerConfig(url=config.storage.url, compose_project_dir=PROJECT_ROOT))
 
     app = QApplication(sys.argv)
     app.setApplicationName(config.app.name)

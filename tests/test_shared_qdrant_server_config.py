@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import unittest
 
-from shared.vector_store import QdrantServerConnectionError, QdrantVectorStore, QdrantVectorStoreConfig
+from shared.vector_store import (
+    QdrantServerConnectionError,
+    QdrantVectorStore,
+    QdrantVectorStoreConfig,
+    VectorPoint,
+)
 
 
 class SharedQdrantServerConfigTest(unittest.TestCase):
@@ -69,10 +74,48 @@ class SharedQdrantServerConfigTest(unittest.TestCase):
         ):
             store.search(vector=[1.0, 0.0], top_k=3)
 
+    def test_vector_store_upserts_points_in_configured_batches(self) -> None:
+        fake_client = UpsertRecordingQdrantClient()
+        store = QdrantVectorStore(
+            QdrantVectorStoreConfig(
+                collection_name="gost_blocks",
+                url="http://127.0.0.1:6333",
+                upsert_batch_size=2,
+            ),
+            client_factory=lambda **kwargs: fake_client,
+        )
+        points = [
+            VectorPoint(id=f"point-{index}", vector=[float(index), 0.0], payload={"document_id": "doc"})
+            for index in range(5)
+        ]
+
+        run = store.upsert_points(points, embedding_dimension=2)
+
+        self.assertEqual(run.stored_points, 5)
+        self.assertEqual([len(batch) for batch in fake_client.upserted_batches], [2, 2, 1])
+
 
 class FakeQdrantClient:
     def collection_exists(self, collection_name: str) -> bool:
         return False
+
+    def close(self) -> None:
+        pass
+
+
+class UpsertRecordingQdrantClient:
+    def __init__(self) -> None:
+        self.collection_created = False
+        self.upserted_batches: list[list[object]] = []
+
+    def collection_exists(self, collection_name: str) -> bool:
+        return self.collection_created
+
+    def create_collection(self, **kwargs: object) -> None:
+        self.collection_created = True
+
+    def upsert(self, collection_name: str, points: list[object], wait: bool) -> None:
+        self.upserted_batches.append(points)
 
     def close(self) -> None:
         pass

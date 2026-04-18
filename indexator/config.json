@@ -13,6 +13,13 @@
     "batch_size": 8,
     "normalize_embeddings": true
   },
+  "indexing": {
+    "mode": "compact",
+    "min_indexable_chars": 24,
+    "target_chunk_chars": 900,
+    "max_chunk_chars": 1600,
+    "store_visual_metadata": true
+  },
   "storage": {
     "provider": "qdrant",
     "collection_name": "gost_blocks",
@@ -23,6 +30,11 @@
     "timeout_seconds": 5.0,
     "api_key": "",
     "shared_data_path": "../shared/data",
-    "distance_metric": "Cosine"
+    "distance_metric": "Cosine",
+    "qdrant_quantization_enabled": true,
+    "qdrant_quantization_mode": "scalar",
+    "qdrant_vectors_on_disk": true,
+    "qdrant_quantized_vectors_always_ram": true,
+    "qdrant_upsert_batch_size": 64
   }
 }

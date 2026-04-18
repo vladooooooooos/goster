@@ -106,6 +106,11 @@ class QdrantStore:
                 https=config.https,
                 api_key=config.api_key,
                 timeout_seconds=config.timeout_seconds,
+                quantization_enabled=config.quantization_enabled,
+                quantization_mode=config.quantization_mode,
+                vectors_on_disk=config.vectors_on_disk,
+                quantized_vectors_always_ram=config.quantized_vectors_always_ram,
+                upsert_batch_size=config.upsert_batch_size,
             )
         )
 

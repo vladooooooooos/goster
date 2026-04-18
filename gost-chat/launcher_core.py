@@ -12,6 +12,14 @@ from pathlib import Path
 from typing import TextIO
 
 
+PROJECT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = PROJECT_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from shared.qdrant_server import QdrantServerConfig, ensure_qdrant_server
+
+
 HOST = "127.0.0.1"
 PORT = 8000
 STARTUP_TIMEOUT_SECONDS = 60
@@ -28,7 +36,6 @@ SERVER_COMMAND = [
     str(PORT),
 ]
 
-PROJECT_DIR = Path(__file__).resolve().parent
 USER_LOG_FILE = PROJECT_DIR / "goster_chat_user.log"
 
 
@@ -45,6 +52,12 @@ def run_launcher(config: LauncherConfig) -> int:
     process: subprocess.Popen | None = None
 
     try:
+        if not config.debug:
+            log_path = config.log_file or USER_LOG_FILE
+            log_handle = log_path.open("a", encoding="utf-8")
+
+        _ensure_qdrant(config, log_handle)
+
         if _is_http_ready():
             _log_or_file(
                 config,
@@ -66,8 +79,6 @@ def run_launcher(config: LauncherConfig) -> int:
             stdout = None
             stderr = None
         else:
-            log_path = config.log_file or USER_LOG_FILE
-            log_handle = log_path.open("a", encoding="utf-8")
             _write_log(log_handle, "Starting GOSTer Chat backend.")
             _write_log(log_handle, f"Working directory: {PROJECT_DIR}")
             _write_log(log_handle, f"Command: {_format_command(command)}")
@@ -105,6 +116,24 @@ def run_launcher(config: LauncherConfig) -> int:
     finally:
         if log_handle is not None:
             log_handle.close()
+
+
+def _ensure_qdrant(config: LauncherConfig, log_handle: TextIO | None) -> None:
+    _log_or_file(config, log_handle, "Checking local Qdrant server.")
+    qdrant_url = _resolve_qdrant_url()
+    result = ensure_qdrant_server(
+        QdrantServerConfig(url=qdrant_url, compose_project_dir=PROJECT_ROOT),
+    )
+    if result.started_by_launcher:
+        _log_or_file(config, log_handle, f"Started local Qdrant server at {result.url}.")
+    else:
+        _log_or_file(config, log_handle, f"Local Qdrant server is already reachable at {result.url}.")
+
+
+def _resolve_qdrant_url() -> str:
+    from app.config import get_settings
+
+    return get_settings().qdrant_url
 
 
 def _wait_until_ready(

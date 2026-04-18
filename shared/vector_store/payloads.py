@@ -24,27 +24,25 @@ def make_point_id(block_id: str) -> str:
 
 def make_gost_block_payload(block: GostBlockVector) -> dict[str, Any]:
     """Build retrieval-friendly Qdrant payload metadata for one GOST block."""
-    return {
+    has_visual_evidence = block.block_type in {"table", "figure", "formula_with_context"} and block.bbox is not None
+    payload = {
         "block_id": block.block_id,
-        "doc_id": block.doc_id,
         "document_id": block.document_id,
-        "doc_title": block.file_name,
         "file_name": block.file_name,
-        "file_path": str(block.file_path),
-        "source_path": str(block.file_path),
-        "indexed_at": block.indexed_at,
-        "block_type": block.block_type,
         "page_start": block.page_number,
         "page_end": block.page_number,
-        "section_path": block.section_path,
+        "block_type": block.block_type,
         "label": block.label,
+        "section_path": block.section_path,
         "text": block.text,
-        "embedding_text": block.embedding_text,
-        "context_text": block.context_text,
-        "bbox": list(block.bbox) if block.bbox else None,
         "reading_order": block.reading_order,
-        "tokens_estimate": estimate_tokens(block.embedding_text),
+        "has_visual_evidence": has_visual_evidence,
     }
+    if has_visual_evidence:
+        payload["bbox"] = list(block.bbox) if block.bbox else None
+        payload["page_number"] = block.page_number
+        payload["crop_status"] = "available"
+    return payload
 
 
 def parse_gost_payload(payload: dict[str, Any], fallback_id: Any) -> GostPayloadFields:

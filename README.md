@@ -239,10 +239,17 @@ python -c "import torch; print(torch.__version__); print(torch.cuda.is_available
 
 Indexator reads `config.json`. By default it writes vectors to the local Qdrant server at `http://127.0.0.1:6333`, collection `gost_blocks`.
 
-Start the local Qdrant server before indexing:
+The chat and Indexator launchers check this server on startup. If it is not reachable, they run Docker Compose and wait for Qdrant to become available:
 
 ```powershell
 docker compose up -d qdrant
+```
+
+To start or stop the local Qdrant server manually with a double click, run:
+
+```powershell
+.\start_qdrant_server.cmd
+.\stop_qdrant_server.cmd
 ```
 
 На Windows можно также использовать переносимый лаунчер:

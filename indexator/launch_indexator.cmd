@@ -8,18 +8,18 @@ set "WORKSPACE_PYTHON=%APP_DIR%..\.venv\Scripts\pythonw.exe"
 cd /d "%APP_DIR%"
 
 if exist "%LOCAL_PYTHON%" (
-    start "" "%LOCAL_PYTHON%" -m app.main
+    start "" "%LOCAL_PYTHON%" "%APP_DIR%run_indexator.py"
     exit /b 0
 )
 
 if exist "%WORKSPACE_PYTHON%" (
-    start "" "%WORKSPACE_PYTHON%" -m app.main
+    start "" "%WORKSPACE_PYTHON%" "%APP_DIR%run_indexator.py"
     exit /b 0
 )
 
 where pythonw.exe >nul 2>nul
 if %errorlevel% equ 0 (
-    start "" pythonw.exe -m app.main
+    start "" pythonw.exe "%APP_DIR%run_indexator.py"
     exit /b 0
 )
 

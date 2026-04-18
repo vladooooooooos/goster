@@ -8,6 +8,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Signal, Slot
 
 from app.core.block_builder import StructuredBlockBuilder
+from app.core.index_compaction import IndexCompactionSettings, compact_index_blocks
 from app.core.pipeline import IndexingPipeline, IndexingProgress
 from app.parsing.pdf_parser import PdfParser
 from app.services.deletion_service import IndexDeletionService
@@ -48,6 +49,7 @@ class IndexWorker(QObject):
         deletion_service: IndexDeletionService,
         output_dir: Path,
         embedding_device: str,
+        compaction_settings: IndexCompactionSettings,
     ) -> None:
         super().__init__()
         self.mode = mode
@@ -64,6 +66,7 @@ class IndexWorker(QObject):
         self.deletion_service = deletion_service
         self.output_dir = output_dir
         self.embedding_device = embedding_device
+        self.compaction_settings = compaction_settings
 
     @Slot()
     def run(self) -> None:
@@ -142,8 +145,9 @@ class IndexWorker(QObject):
         parsed_document = self.parser.parse(pdf_path)
         self._report(pdf_path.name, 1, 1, "build_blocks")
         structured_blocks = self.block_builder.build(parsed_document)
+        index_blocks = compact_index_blocks(structured_blocks, self.compaction_settings)
         self._report(pdf_path.name, 1, 1, "embed")
-        embedding_run = self.embedding_service.embed_blocks(structured_blocks)
+        embedding_run = self.embedding_service.embed_blocks(index_blocks)
         debug_path = export_embedding_summary(
             embedding_run,
             self.output_dir / f"{pdf_path.stem}_embedding_summary.json",
@@ -157,10 +161,11 @@ class IndexWorker(QObject):
         parsed_document = self.parser.parse(pdf_path)
         self._report(pdf_path.name, 1, 1, "build_blocks")
         structured_blocks = self.block_builder.build(parsed_document)
+        index_blocks = compact_index_blocks(structured_blocks, self.compaction_settings)
         self._report(pdf_path.name, 1, 1, "embed")
-        embedding_run = self.embedding_service.embed_blocks(structured_blocks)
+        embedding_run = self.embedding_service.embed_blocks(index_blocks)
         self._report(pdf_path.name, 1, 1, "store")
-        storage_run = self.qdrant_store.upsert_block_embeddings(structured_blocks, embedding_run)
+        storage_run = self.qdrant_store.upsert_block_embeddings(index_blocks, embedding_run)
         debug_path = export_qdrant_storage_summary(
             storage_run,
             self.output_dir / f"{pdf_path.stem}_qdrant_storage_summary.json",

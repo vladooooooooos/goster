@@ -35,7 +35,12 @@ class QdrantVectorStore:
         self.call_qdrant(
             self.client.create_collection,
             collection_name=self.collection_name,
-            vectors_config=make_vectors_config(embedding_dimension, self.distance_metric),
+            vectors_config=make_vectors_config(
+                embedding_dimension,
+                self.distance_metric,
+                vectors_on_disk=self.config.vectors_on_disk,
+            ),
+            **make_collection_optimization_kwargs(self.config),
         )
 
     def upsert_points(self, points: list[VectorPoint], embedding_dimension: int) -> VectorStorageRun:
@@ -51,15 +56,16 @@ class QdrantVectorStore:
 
         self.ensure_collection(embedding_dimension)
         start_time = perf_counter()
-        self.call_qdrant(
-            self.client.upsert,
-            collection_name=self.collection_name,
-            points=[
-                models.PointStruct(id=point.id, vector=point.vector, payload=point.payload)
-                for point in points
-            ],
-            wait=True,
-        )
+        for batch in iter_batches(points, self.config.upsert_batch_size):
+            self.call_qdrant(
+                self.client.upsert,
+                collection_name=self.collection_name,
+                points=[
+                    models.PointStruct(id=point.id, vector=point.vector, payload=point.payload)
+                    for point in batch
+                ],
+                wait=True,
+            )
         elapsed_seconds = perf_counter() - start_time
 
         return VectorStorageRun(
@@ -135,12 +141,39 @@ def make_client_kwargs(config: QdrantVectorStoreConfig) -> dict[str, Any]:
     return kwargs
 
 
-def make_vectors_config(embedding_dimension: int, distance_metric: str) -> models.VectorParams:
+def iter_batches(points: list[VectorPoint], batch_size: int) -> list[list[VectorPoint]]:
+    """Split points into non-empty batches for Qdrant request size control."""
+    resolved_batch_size = max(1, batch_size)
+    return [
+        points[start : start + resolved_batch_size]
+        for start in range(0, len(points), resolved_batch_size)
+    ]
+
+
+def make_vectors_config(
+    embedding_dimension: int,
+    distance_metric: str,
+    vectors_on_disk: bool = False,
+) -> models.VectorParams:
     """Build vector params in one place for future server-side storage tuning."""
     return models.VectorParams(
         size=embedding_dimension,
         distance=resolve_distance(distance_metric),
+        on_disk=vectors_on_disk,
     )
+
+
+def make_collection_optimization_kwargs(config: QdrantVectorStoreConfig) -> dict[str, Any]:
+    """Build optional server-side collection storage optimization settings."""
+    kwargs: dict[str, Any] = {}
+    if config.quantization_enabled and config.quantization_mode.strip().lower() == "scalar":
+        kwargs["quantization_config"] = models.ScalarQuantization(
+            scalar=models.ScalarQuantizationConfig(
+                type=models.ScalarType.INT8,
+                always_ram=config.quantized_vectors_always_ram,
+            )
+        )
+    return kwargs
 
 
 def make_search_result(point: Any) -> VectorSearchResult:

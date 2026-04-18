@@ -9,6 +9,7 @@ from pathlib import Path
 from time import perf_counter
 
 from app.core.block_builder import StructuredBlockBuilder, make_document_id
+from app.core.index_compaction import IndexCompactionSettings, compact_index_blocks
 from app.parsing.pdf_parser import PdfParser
 from app.services.embedding_service import StructuredBlockEmbeddingService
 from app.services.file_fingerprint import FileFingerprintService
@@ -68,6 +69,7 @@ class IndexingPipeline:
         block_builder: StructuredBlockBuilder,
         embedding_service: StructuredBlockEmbeddingService,
         qdrant_store: QdrantStore,
+        compaction_settings: IndexCompactionSettings | None = None,
         document_registry: DocumentRegistry | None = None,
         fingerprint_service: FileFingerprintService | None = None,
     ) -> None:
@@ -75,6 +77,7 @@ class IndexingPipeline:
         self.block_builder = block_builder
         self.embedding_service = embedding_service
         self.qdrant_store = qdrant_store
+        self.compaction_settings = compaction_settings or IndexCompactionSettings()
         self.document_registry = document_registry
         self.fingerprint_service = fingerprint_service or FileFingerprintService()
 
@@ -125,13 +128,14 @@ class IndexingPipeline:
 
             self._report(progress_callback, pdf_path.name, file_index, total_files, "build_blocks")
             structured_blocks = self.block_builder.build(parsed_document)
+            index_blocks = compact_index_blocks(structured_blocks, self.compaction_settings)
 
             self._report(progress_callback, pdf_path.name, file_index, total_files, "embed")
-            embedding_run = self.embedding_service.embed_blocks(structured_blocks)
+            embedding_run = self.embedding_service.embed_blocks(index_blocks)
 
             self._report(progress_callback, pdf_path.name, file_index, total_files, "store")
             storage_run = self.qdrant_store.upsert_block_embeddings(
-                structured_blocks,
+                index_blocks,
                 embedding_run,
                 indexed_at=indexed_at,
             )

@@ -1,5 +1,7 @@
 import logging
+import sys
 import time
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -20,7 +22,14 @@ from app.services.reranker_service import LocalRerankerService, RerankerSettings
 from app.services.retrieval_pipeline import RetrievalPipeline
 from app.services.retriever import Retriever
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from shared.qdrant_server import QdrantServerConfig, ensure_qdrant_server
+
 settings = get_settings()
+ensure_qdrant_server(QdrantServerConfig(url=settings.qdrant_url, compose_project_dir=PROJECT_ROOT))
 
 logging.basicConfig(
     level=settings.log_level.upper(),

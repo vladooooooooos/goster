@@ -151,7 +151,7 @@ class FakeQdrantClient:
     def collection_exists(self, collection_name: str) -> bool:
         return collection_name in self.collections
 
-    def create_collection(self, collection_name: str, vectors_config: object) -> None:
+    def create_collection(self, collection_name: str, vectors_config: object, **kwargs: object) -> None:
         self.collections.setdefault(collection_name, {})
 
     def upsert(self, collection_name: str, points: list[object], wait: bool) -> None:

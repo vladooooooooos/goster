@@ -244,7 +244,7 @@ GOST_CHAT_RERANKER_ENABLED=true
 ```
 
 2. Выбрать папку с PDFs и выполнить indexing.
-3. Ensure the local Qdrant server is running at `http://127.0.0.1:6333`.
+3. Start chat through the launcher; it will start local Qdrant through Docker Compose if `http://127.0.0.1:6333` is not reachable.
 4. В `gost-chat/.env` оставить:
 
 ```text
@@ -265,6 +265,8 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```text
 http://127.0.0.1:8000
 ```
+
+To start or stop the local Qdrant server manually, double-click `start_qdrant_server.cmd` or `stop_qdrant_server.cmd` in the repository root.
 
 ### Вариант B: fallback через lite JSON indexer
 

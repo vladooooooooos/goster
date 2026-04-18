@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 
 from app.core.block_builder import StructuredBlockBuilder, make_document_id
 from app.core.blocks import StructuredBlock
+from app.core.index_compaction import IndexCompactionSettings
 from app.core.pipeline import IndexedFileResult, IndexingPipeline, IndexingProgress, IndexingRunSummary
 from app.parsing.pdf_parser import ParsedDocument, PdfParser
 from app.services.deletion_service import ClearOperationSummary, IndexDeletionService
@@ -248,6 +249,13 @@ class MainWindow(QMainWindow):
         self.fingerprint_service = FileFingerprintService()
         self.indexed_state_resolver = IndexedStateResolver(self.fingerprint_service)
         self.embedding_service = StructuredBlockEmbeddingService.from_config(config.embedding)
+        self.compaction_settings = IndexCompactionSettings(
+            mode=config.indexing.mode,  # type: ignore[arg-type]
+            min_indexable_chars=config.indexing.min_indexable_chars,
+            target_chunk_chars=config.indexing.target_chunk_chars,
+            max_chunk_chars=config.indexing.max_chunk_chars,
+            store_visual_metadata=config.indexing.store_visual_metadata,
+        )
         self.app_root = Path(__file__).resolve().parents[2]
         self.qdrant_store = QdrantStore.from_config(config.storage, self.app_root)
         self.document_registry = DocumentRegistry(resolve_shared_data_path(config.storage.shared_data_path, self.app_root))
@@ -257,6 +265,7 @@ class MainWindow(QMainWindow):
             block_builder=self.block_builder,
             embedding_service=self.embedding_service,
             qdrant_store=self.qdrant_store,
+            compaction_settings=self.compaction_settings,
             document_registry=self.document_registry,
             fingerprint_service=self.fingerprint_service,
         )
@@ -709,6 +718,7 @@ class MainWindow(QMainWindow):
             deletion_service=self.deletion_service,
             output_dir=self.output_dir,
             embedding_device=self.embedding_service.embedder.describe_device_runtime(),
+            compaction_settings=self.compaction_settings,
         )
         worker.moveToThread(thread)
 
