@@ -40,19 +40,20 @@ class RetrievalPipeline:
         if not normalized_query:
             raise EmptyQueryError("Search query cannot be empty.")
 
-        final_top_n = self._final_top_n(top_k)
+        candidate_pool_top_n = self._candidate_pool_top_n(top_k)
         retrieval_top_k = self._retrieval_top_k(top_k)
         candidates, retrieval_info = self._retrieve_candidates(normalized_query, top_k=retrieval_top_k)
         info = {
             **retrieval_info,
             "requested_top_k": top_k,
             "retrieval_top_k": retrieval_top_k,
-            "final_top_n": final_top_n,
+            "candidate_pool_top_n": candidate_pool_top_n,
+            "final_top_n": candidate_pool_top_n,
             "retrieved_candidates_count": len(candidates),
             "reranker_enabled": self._reranker.enabled if self._reranker else False,
         }
 
-        results = self._rerank_candidates(normalized_query, candidates, top_n=final_top_n)
+        results = self._rerank_candidates(normalized_query, candidates, top_n=candidate_pool_top_n)
         info["reranked_results_count"] = len(results)
 
         return RetrievalPipelineResult(
@@ -101,7 +102,7 @@ class RetrievalPipeline:
             return max(requested_top_k, self._settings.reranker_top_k)
         return requested_top_k
 
-    def _final_top_n(self, requested_top_k: int) -> int:
+    def _candidate_pool_top_n(self, requested_top_k: int) -> int:
         if self._reranker and self._reranker.enabled:
-            return max(1, min(requested_top_k, self._settings.reranker_top_n))
+            return max(1, min(self._settings.reranker_top_n, max(requested_top_k, self._settings.reranker_top_n)))
         return requested_top_k
