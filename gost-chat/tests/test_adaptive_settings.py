@@ -22,7 +22,8 @@ class AdaptiveSettingsTest(unittest.TestCase):
 
         self.assertEqual(settings.context_min_blocks, 2)
         self.assertEqual(settings.context_soft_target_blocks, 5)
-        self.assertEqual(settings.context_max_blocks, 10)
+        self.assertEqual(settings.context_simple_target_blocks, 5)
+        self.assertEqual(settings.context_max_blocks, 12)
         self.assertEqual(settings.context_max_chars, 18000)
         self.assertEqual(settings.context_adaptive_score_threshold, 0.12)
 
@@ -32,7 +33,10 @@ class AdaptiveSettingsTest(unittest.TestCase):
         self.assertTrue(settings.visual_enable_decision)
         self.assertEqual(settings.visual_crops_dir.as_posix(), "data/crops")
         self.assertEqual(settings.visual_crop_dpi, 160)
-        self.assertEqual(settings.visual_max_crops_per_answer, 1)
+        self.assertEqual(settings.visual_max_crops_per_answer, 4)
+        self.assertTrue(settings.visual_vision_enabled)
+        self.assertEqual(settings.visual_page_render_dpi, 120)
+        self.assertEqual(settings.visual_candidate_limit, 8)
 
     def test_settings_use_broad_default_reranker_pool(self):
         settings = Settings()

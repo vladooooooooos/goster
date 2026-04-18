@@ -30,47 +30,55 @@ class FakeLlmService:
 
 
 class FakeRetrievalPipeline:
+    def __init__(self, visual_count: int = 1):
+        self.visual_count = visual_count
+
     def retrieve(self, query, top_k):
-        visual_payload = {
-            "has_visual_evidence": True,
-            "bbox": [10.0, 20.0, 110.0, 120.0],
-            "page_number": 2,
-        }
-        result = RerankedBlock(
-            block_id="v1",
-            text="Formula context",
-            retrieval_text="Formula context",
-            source_file="source.pdf",
-            page=2,
-            section_path=[],
-            retrieval_score=0.9,
-            rerank_score=0.95,
-            payload=visual_payload,
-            document_id="doc-1",
-            page_start=2,
-            page_end=2,
-            block_type="formula_with_context",
-            label="Formula 1",
-        )
-        candidate = RetrievedBlock(
-            block_id=result.block_id,
-            text=result.text,
-            retrieval_text=result.retrieval_text,
-            source_file=result.source_file,
-            page=result.page,
-            section_path=result.section_path,
-            retrieval_score=result.retrieval_score,
-            payload=result.payload,
-            document_id=result.document_id,
-            page_start=result.page_start,
-            page_end=result.page_end,
-            block_type=result.block_type,
-            label=result.label,
-        )
+        results = [
+            RerankedBlock(
+                block_id=f"v{index}",
+                text=f"Formula context {index}",
+                retrieval_text=f"Formula context {index}",
+                source_file="source.pdf",
+                page=2,
+                section_path=[],
+                retrieval_score=0.9 - index * 0.01,
+                rerank_score=0.95 - index * 0.01,
+                payload={
+                    "has_visual_evidence": True,
+                    "bbox": [10.0, 20.0, 110.0, 120.0],
+                    "page_number": 2,
+                },
+                document_id="doc-1",
+                page_start=2,
+                page_end=2,
+                block_type="formula_with_context",
+                label=f"Formula {index}",
+            )
+            for index in range(1, self.visual_count + 1)
+        ]
+        candidates = [
+            RetrievedBlock(
+                block_id=result.block_id,
+                text=result.text,
+                retrieval_text=result.retrieval_text,
+                source_file=result.source_file,
+                page=result.page,
+                section_path=result.section_path,
+                retrieval_score=result.retrieval_score,
+                payload=result.payload,
+                document_id=result.document_id,
+                page_start=result.page_start,
+                page_end=result.page_end,
+                block_type=result.block_type,
+                label=result.label,
+            )
+            for result in results
+        ]
         return RetrievalPipelineResult(
             query=query,
-            candidates=[candidate],
-            results=[result],
+            candidates=candidates,
+            results=results,
             info={"backend": "test"},
         )
 
@@ -135,3 +143,28 @@ class RagVisualFlowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(answer.retrieval_info["visual"]["decision"]["mode"], "show_visual")
         self.assertTrue(answer.retrieval_info["visual"]["decision"]["show_in_sources"])
         self.assertIn("Explicit visual request promoted visual decision", "\n".join(logs.output))
+
+    async def test_implicit_visual_query_returns_multiple_visual_attachments(self):
+        service = RagService(
+            llm_service=FakeLlmService(
+                visual_decision=(
+                    '{"mode":"text_only","target_block_ids":[],"show_in_sources":false,'
+                    '"show_in_answer":false,"needs_multimodal_followup":false,'
+                    '"reason":"The text is enough."}'
+                )
+            ),
+            retrieval_pipeline=FakeRetrievalPipeline(visual_count=5),
+            context_builder=ContextBuilder(ContextBuilderSettings(min_blocks=1, soft_target_blocks=2, max_blocks=12)),
+            visual_crop_service=FakeCropService(),
+            visual_decision_enabled=True,
+            visual_max_crops_per_answer=4,
+        )
+
+        answer = await service.answer_question("sink and mixer layout", top_k=12)
+
+        self.assertEqual(len(answer.visual_evidence), 4)
+        self.assertEqual(answer.retrieval_info["query_plan"]["tasks"][0]["needs_visual"], True)
+        self.assertEqual(answer.retrieval_info["visual"]["selected_count"], 4)
+        self.assertEqual(answer.retrieval_info["visual"]["candidate_count"], 5)
+        answer_prompt = service._llm_service.calls[-1][-1]["content"]
+        self.assertIn("Visual evidence has been attached", answer_prompt)

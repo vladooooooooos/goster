@@ -39,13 +39,17 @@ class Settings(BaseSettings):
     reranker_use_fp16_if_available: bool = True
     context_min_blocks: int = 2
     context_soft_target_blocks: int = 5
-    context_max_blocks: int = 10
+    context_simple_target_blocks: int = 5
+    context_max_blocks: int = 12
     context_max_chars: int = 18000
     context_adaptive_score_threshold: float = 0.12
     visual_enable_decision: bool = True
     visual_crops_dir: Path = Path("data/crops")
     visual_crop_dpi: int = 160
-    visual_max_crops_per_answer: int = 1
+    visual_max_crops_per_answer: int = 4
+    visual_vision_enabled: bool = True
+    visual_page_render_dpi: int = 120
+    visual_candidate_limit: int = 8
 
     model_config = SettingsConfigDict(
         env_file=".env",

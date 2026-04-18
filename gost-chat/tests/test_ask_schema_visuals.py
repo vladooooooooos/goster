@@ -24,6 +24,10 @@ class AskSchemaVisualsTest(unittest.TestCase):
             height=100,
             format="png",
             dpi=160,
+            selection_reason="Relevant figure.",
+            confidence=0.75,
+            source_block_id="v1",
+            crop_kind="vision_selected",
         )
         response = AskResponse(
             query="query",
@@ -62,4 +66,6 @@ class AskSchemaVisualsTest(unittest.TestCase):
         payload = response.model_dump()
 
         self.assertEqual(payload["visual_evidence"][0]["crop_url"], "/crops/doc-1/page-2-v1.png")
+        self.assertEqual(payload["visual_evidence"][0]["selection_reason"], "Relevant figure.")
+        self.assertEqual(payload["visual_evidence"][0]["crop_kind"], "vision_selected")
         self.assertEqual(payload["citations"][0]["visual_evidence"]["block_id"], "v1")

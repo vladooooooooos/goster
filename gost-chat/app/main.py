@@ -100,6 +100,7 @@ app.state.rag_service = RagService(
     visual_crop_service=app.state.visual_crop_service,
     visual_decision_enabled=settings.visual_enable_decision,
     visual_max_crops_per_answer=settings.visual_max_crops_per_answer,
+    visual_vision_enabled=settings.visual_vision_enabled,
 )
 
 settings.visual_crops_dir.mkdir(parents=True, exist_ok=True)

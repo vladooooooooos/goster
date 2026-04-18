@@ -374,14 +374,25 @@ function createCitationSummary(data) {
   const summary = document.createElement("p");
   summary.className = "citation-summary";
   const citations = Array.isArray(data.citations) ? data.citations : [];
-
+  const visuals = Array.isArray(data.visual_evidence) ? data.visual_evidence.filter((item) => item && item.crop_url) : [];
+  const tasks = data.retrieval_info &&
+    data.retrieval_info.query_plan &&
+    Array.isArray(data.retrieval_info.query_plan.tasks)
+    ? data.retrieval_info.query_plan.tasks
+    : [];
   if (!citations.length) {
-    summary.textContent = "Источники не найдены.";
+    summary.textContent = "\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0438 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u044b.";
     return summary;
   }
-
-  const count = citations.length;
-  summary.textContent = `Источников: ${count}. Найдено фрагментов: ${data.retrieved_results_count}.`;
+  const parts = [
+    `\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u043e\u0432: ${citations.length}`,
+    `\u0418\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0439: ${visuals.length}`,
+    `\u041d\u0430\u0439\u0434\u0435\u043d\u043e \u0444\u0440\u0430\u0433\u043c\u0435\u043d\u0442\u043e\u0432: ${data.retrieved_results_count}`,
+  ];
+  if (tasks.length) {
+    parts.push(`\u041f\u043e\u0434\u0437\u0430\u0434\u0430\u0447: ${tasks.length}`);
+  }
+  summary.textContent = `${parts.join(". ")}.`;
   return summary;
 }
 

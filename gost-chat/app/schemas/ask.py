@@ -19,6 +19,10 @@ class AskVisualEvidence(BaseModel):
     height: int
     format: str
     dpi: int
+    selection_reason: str | None = None
+    confidence: float | None = None
+    source_block_id: str | None = None
+    crop_kind: str | None = None
 
 
 class AskCitation(BaseModel):

@@ -30,7 +30,9 @@ class LlmService(Protocol):
 
     async def is_available(self) -> bool: ...
 
-    async def chat(self, messages: list[dict[str, str]]) -> str: ...
+    async def chat(self, messages: list[dict[str, Any]]) -> str: ...
+
+    async def chat_with_images(self, messages: list[dict[str, Any]]) -> str: ...
 
 
 class PolzaLlmService:
@@ -73,15 +75,25 @@ class PolzaLlmService:
             )
             return False
 
-    async def chat(self, messages: list[dict[str, str]]) -> str:
-        api_key = self._require_api_key()
-        payload: dict[str, Any] = {
+    async def chat(self, messages: list[dict[str, Any]]) -> str:
+        payload = self.build_chat_payload(messages)
+        return await self._post_chat_payload(payload)
+
+    async def chat_with_images(self, messages: list[dict[str, Any]]) -> str:
+        payload = self.build_chat_payload(messages)
+        return await self._post_chat_payload(payload)
+
+    def build_chat_payload(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
+        return {
             "model": self._model,
             "messages": messages,
             "temperature": self._temperature,
             "max_tokens": self._max_tokens,
             "stream": False,
         }
+
+    async def _post_chat_payload(self, payload: dict[str, Any]) -> str:
+        api_key = self._require_api_key()
 
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:

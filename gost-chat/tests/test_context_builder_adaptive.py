@@ -7,6 +7,7 @@ if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
 from app.services.context_builder import ContextBuilder, ContextBuilderSettings
+from app.services.query_planner import QueryPlanner
 from app.services.retrieval_types import RerankedBlock
 
 
@@ -148,3 +149,57 @@ class AdaptiveContextBuilderTest(unittest.TestCase):
         output = "\n".join(logs.output)
         self.assertIn("input block types", output)
         self.assertIn("selected evidence block types", output)
+
+    def test_compound_query_plan_expands_selection_up_to_adaptive_cap(self):
+        builder = ContextBuilder(
+            ContextBuilderSettings(
+                min_blocks=2,
+                soft_target_blocks=5,
+                max_blocks=12,
+                adaptive_score_threshold=0.12,
+                max_context_chars=30000,
+            )
+        )
+        ranked = [block(f"b{index}", f"unique evidence {index}", 1.0 - index * 0.05) for index in range(10)]
+        query_plan = QueryPlanner().plan("show sink layout and explain elements")
+
+        built = builder.build("show sink layout and explain elements", ranked, query_plan=query_plan)
+
+        self.assertGreater(len(built.selected), 5)
+        self.assertLessEqual(len(built.selected), 12)
+        self.assertEqual(built.stats.stop_reason, "exhausted")
+        self.assertIn("task-1", built.coverage)
+        self.assertIn("task-2", built.coverage)
+
+    def test_visual_query_plan_keeps_multiple_visual_refs(self):
+        builder = ContextBuilder(
+            ContextBuilderSettings(
+                min_blocks=1,
+                soft_target_blocks=3,
+                max_blocks=12,
+                adaptive_score_threshold=0.12,
+                max_context_chars=30000,
+            )
+        )
+        ranked = [
+            block("text-1", "intro text", 1.0),
+            *[
+                block(
+                    f"visual-{index}",
+                    f"figure evidence {index}",
+                    0.9 - index * 0.05,
+                    payload={
+                        "has_visual_evidence": True,
+                        "bbox": [10.0, 20.0, 110.0, 120.0],
+                        "page_number": 1,
+                    },
+                    block_type="figure",
+                )
+                for index in range(1, 5)
+            ],
+        ]
+        query_plan = QueryPlanner().plan("show sink layout and shower grid layout")
+
+        built = builder.build("show sink layout and shower grid layout", ranked, query_plan=query_plan)
+
+        self.assertGreaterEqual(len(built.visual_hints.selected), 2)

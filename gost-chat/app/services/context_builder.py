@@ -4,6 +4,7 @@ import logging
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from app.services.query_planner import QueryPlan
 from app.services.retrieval_types import RerankedBlock
 from app.services.visual_evidence import ContextVisualHints, VisualEvidenceRef, visual_ref_from_block
 
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 class ContextBuilderSettings:
     min_blocks: int = 2
     soft_target_blocks: int = 5
-    max_blocks: int = 10
+    max_blocks: int = 12
     max_context_chars: int = 18000
     max_chars_per_block: int = 4000
     evidence_preview_chars: int = 320
@@ -57,13 +58,20 @@ class BuiltContext:
     formatted_context: str
     stats: ContextBuildStats
     visual_hints: ContextVisualHints
+    coverage: dict[str, list[str]]
+    query_plan: QueryPlan | None = None
 
 
 class ContextBuilder:
     def __init__(self, settings: ContextBuilderSettings | None = None) -> None:
         self.settings = settings or ContextBuilderSettings()
 
-    def build(self, query: str, ranked_blocks: list[RerankedBlock]) -> BuiltContext:
+    def build(
+        self,
+        query: str,
+        ranked_blocks: list[RerankedBlock],
+        query_plan: QueryPlan | None = None,
+    ) -> BuiltContext:
         selected: list[ContextEvidence] = []
         seen_block_ids: set[str] = set()
         seen_texts: set[str] = set()
@@ -73,6 +81,8 @@ class ContextBuilder:
         total_chars_included = 0
         best_score: float | None = None
         stop_reason = "exhausted"
+
+        effective_soft_target_blocks = _effective_soft_target_blocks(self.settings, query_plan)
 
         for block in ranked_blocks:
             if len(selected) >= max(1, self.settings.max_blocks):
@@ -86,7 +96,7 @@ class ContextBuilder:
             if (
                 selected
                 and len(selected) >= self.settings.min_blocks
-                and len(selected) >= self.settings.soft_target_blocks
+                and len(selected) >= effective_soft_target_blocks
                 and best_score > 0
                 and score < best_score * (1 - self.settings.adaptive_score_threshold)
             ):
@@ -149,6 +159,23 @@ class ContextBuilder:
         if visual_added is not None:
             selected.append(visual_added)
 
+        selected = self._add_visual_coverage_if_needed(
+            selected=selected,
+            ranked_blocks=ranked_blocks,
+            seen_block_ids=seen_block_ids,
+            seen_texts=seen_texts,
+            total_chars_included=len("\n\n---\n\n".join(
+                self._format_context_piece(
+                    index=evidence.index,
+                    block=evidence.block,
+                    prompt_text=evidence.prompt_text,
+                )
+                for evidence in selected
+            )),
+            query_plan=query_plan,
+        )
+        selected = _reindex_evidence(selected)
+
         formatted_context = "\n\n---\n\n".join(
             self._format_context_piece(
                 index=evidence.index,
@@ -177,6 +204,8 @@ class ContextBuilder:
             formatted_context=formatted_context,
             stats=stats,
             visual_hints=visual_hints,
+            coverage=_build_coverage(selected, query_plan),
+            query_plan=query_plan,
         )
         logger.info(
             "ContextBuilder input block types=%s; selected evidence block types=%s; "
@@ -272,6 +301,81 @@ class ContextBuilder:
                 candidate_refs.append(ref)
         return ContextVisualHints(selected=selected_refs, candidates=candidate_refs)
 
+    def _add_visual_coverage_if_needed(
+        self,
+        selected: list[ContextEvidence],
+        ranked_blocks: list[RerankedBlock],
+        seen_block_ids: set[str],
+        seen_texts: set[str],
+        total_chars_included: int,
+        query_plan: QueryPlan | None,
+    ) -> list[ContextEvidence]:
+        if query_plan is None or not query_plan.needs_visual:
+            return selected
+
+        next_selected = list(selected)
+        min_visual_count = min(
+            max(2, sum(1 for task in query_plan.tasks if task.needs_visual)),
+            max(1, self.settings.max_blocks),
+        )
+        current_visual_count = sum(
+            1 for evidence in next_selected if visual_ref_from_block(evidence.block, evidence.evidence_preview)
+        )
+        if current_visual_count >= min_visual_count:
+            return next_selected
+
+        for block in ranked_blocks:
+            if len(next_selected) >= max(1, self.settings.max_blocks):
+                break
+            if block.block_id in seen_block_ids:
+                continue
+            normalized_text = normalize_text(block.evidence_text)
+            if not normalized_text:
+                continue
+            text_key = normalized_text.casefold()
+            if text_key in seen_texts:
+                continue
+            ref = visual_ref_from_block(block, truncate_text(normalized_text, self.settings.evidence_preview_chars))
+            if ref is None:
+                continue
+
+            evidence = self._make_evidence(
+                block=block,
+                normalized_text=normalized_text,
+                index=len(next_selected) + 1,
+                total_chars_included=total_chars_included,
+            )
+            if evidence is None:
+                continue
+            next_selected.append(evidence)
+            seen_block_ids.add(block.block_id)
+            seen_texts.add(text_key)
+            current_visual_count += 1
+            if current_visual_count >= min_visual_count:
+                break
+        return next_selected
+
+    def _make_evidence(
+        self,
+        block: RerankedBlock,
+        normalized_text: str,
+        index: int,
+        total_chars_included: int,
+    ) -> ContextEvidence | None:
+        prompt_text = truncate_text(normalized_text, self.settings.max_chars_per_block)
+        context_piece = self._format_context_piece(index=index, block=block, prompt_text=prompt_text)
+        separator_chars = 7 if total_chars_included else 0
+        if total_chars_included and total_chars_included + separator_chars + len(context_piece) > self.settings.max_context_chars:
+            return None
+        return ContextEvidence(
+            index=index,
+            block=block,
+            prompt_text=prompt_text,
+            evidence_preview=truncate_text(normalized_text, self.settings.evidence_preview_chars),
+            source_label=block.source_file,
+            page_label=format_page_range(block.page_start, block.page_end),
+        )
+
 
 def normalize_text(text: str) -> str:
     return " ".join(text.split())
@@ -298,3 +402,30 @@ def format_page_range(page_start: int | None, page_end: int | None) -> str:
 
 def _block_types(blocks: list[RerankedBlock]) -> list[str]:
     return [block.block_type or "unknown" for block in blocks]
+
+
+def _effective_soft_target_blocks(settings: ContextBuilderSettings, query_plan: QueryPlan | None) -> int:
+    if query_plan is None or query_plan.complexity == "simple" and not query_plan.needs_visual:
+        return settings.soft_target_blocks
+    return settings.max_blocks
+
+
+def _reindex_evidence(selected: list[ContextEvidence]) -> list[ContextEvidence]:
+    return [
+        ContextEvidence(
+            index=index,
+            block=evidence.block,
+            prompt_text=evidence.prompt_text,
+            evidence_preview=evidence.evidence_preview,
+            source_label=evidence.source_label,
+            page_label=evidence.page_label,
+        )
+        for index, evidence in enumerate(selected, start=1)
+    ]
+
+
+def _build_coverage(selected: list[ContextEvidence], query_plan: QueryPlan | None) -> dict[str, list[str]]:
+    if query_plan is None:
+        return {}
+    selected_ids = [evidence.block.block_id for evidence in selected]
+    return {task.id: selected_ids for task in query_plan.tasks}
