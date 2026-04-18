@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from app.services.retrieval_types import RerankedBlock
+from app.services.visual_evidence import ContextVisualHints, VisualEvidenceRef, visual_ref_from_block
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,7 @@ class BuiltContext:
     selected: list[ContextEvidence]
     formatted_context: str
     stats: ContextBuildStats
+    visual_hints: ContextVisualHints
 
 
 class ContextBuilder:
@@ -142,6 +144,7 @@ class ContextBuilder:
             )
             for evidence in selected
         )
+        visual_hints = self._build_visual_hints(selected, ranked_blocks)
         stats = ContextBuildStats(
             input_count=len(ranked_blocks),
             selected_count=len(selected),
@@ -160,6 +163,7 @@ class ContextBuilder:
             selected=selected,
             formatted_context=formatted_context,
             stats=stats,
+            visual_hints=visual_hints,
         )
 
     def _format_context_piece(self, index: int, block: RerankedBlock, prompt_text: str) -> str:
@@ -177,6 +181,27 @@ class ContextBuilder:
                 prompt_text,
             ]
         )
+
+    def _build_visual_hints(
+        self,
+        selected: list[ContextEvidence],
+        ranked_blocks: list[RerankedBlock],
+    ) -> ContextVisualHints:
+        selected_refs = [
+            ref
+            for evidence in selected
+            if (ref := visual_ref_from_block(evidence.block, evidence.evidence_preview))
+        ]
+        selected_ids = {ref.block_id for ref in selected_refs}
+        candidate_refs: list[VisualEvidenceRef] = []
+        for block in ranked_blocks:
+            if block.block_id in selected_ids:
+                continue
+            preview = truncate_text(block.evidence_text, self.settings.evidence_preview_chars)
+            ref = visual_ref_from_block(block, preview)
+            if ref:
+                candidate_refs.append(ref)
+        return ContextVisualHints(selected=selected_refs, candidates=candidate_refs)
 
 
 def normalize_text(text: str) -> str:
